@@ -6,6 +6,7 @@ Local Lightweight REST API & Dashboard Server
 import os
 import sys
 import json
+import gzip
 import mimetypes
 import webbrowser
 import time
@@ -13,6 +14,7 @@ from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 import threading
+from typing import Any, Tuple, Optional, List, Dict
 
 from datetime import datetime
 import pandas as pd
@@ -26,6 +28,25 @@ from engine.backtester import Backtester
 from engine.reporter import Visualizer, ReportGenerator
 from engine.tracker import tracker
 from engine.logger import log_error, log_sync, log_info
+
+
+_UI_CACHE_LOCK = threading.Lock()
+_UI_CACHED_RAW: bytes = b""
+_UI_CACHED_GZIP: bytes = b""
+_UI_CACHED_MTIME: float = 0.0
+
+
+def _get_cached_ui_data(ui_path: Path):
+    global _UI_CACHED_RAW, _UI_CACHED_GZIP, _UI_CACHED_MTIME
+    mtime = ui_path.stat().st_mtime
+    with _UI_CACHE_LOCK:
+        if not _UI_CACHED_RAW or mtime != _UI_CACHED_MTIME:
+            raw = ui_path.read_bytes()
+            gz = gzip.compress(raw, compresslevel=6)
+            _UI_CACHED_RAW = raw
+            _UI_CACHED_GZIP = gz
+            _UI_CACHED_MTIME = mtime
+        return _UI_CACHED_RAW, _UI_CACHED_GZIP
 
 
 class RobustThreadingServer(ThreadingHTTPServer):
@@ -63,6 +84,34 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
         except Exception:
             pass
+
+    def _send_json_response(self, data_obj: Any, status: int = 200):
+        """High-efficiency JSON response with transparent gzip compression (>1KB payloads)."""
+        try:
+            body_bytes = json.dumps(data_obj, ensure_ascii=False).encode('utf-8')
+            accept_enc = self.headers.get('Accept-Encoding', '') if hasattr(self, 'headers') and self.headers else ''
+            if 'gzip' in accept_enc and len(body_bytes) > 1024:
+                compressed = gzip.compress(body_bytes, compresslevel=5)
+                self.send_response(status)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Encoding', 'gzip')
+                self.send_header('Content-Length', str(len(compressed)))
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                self.end_headers()
+                self._safe_write(compressed)
+            else:
+                self.send_response(status)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Length', str(len(body_bytes)))
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                self.end_headers()
+                self._safe_write(body_bytes)
+        except Exception as e:
+            log_error("Error in _send_json_response", exc=e)
 
     def do_OPTIONS(self):
         self._set_json_headers(200)
@@ -186,14 +235,24 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
                 ui_path = Path(meipass) / "ui" / "index.html"
 
         if ui_path.exists():
-            with open(ui_path, 'rb') as f:
-                content = f.read()
             try:
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/html; charset=utf-8')
-                self.send_header('Content-Length', str(len(content)))
-                self.end_headers()
-                self._safe_write(content)
+                raw_bytes, gz_bytes = _get_cached_ui_data(ui_path)
+                accept_enc = self.headers.get('Accept-Encoding', '') if hasattr(self, 'headers') and self.headers else ''
+                if 'gzip' in accept_enc and gz_bytes:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/html; charset=utf-8')
+                    self.send_header('Content-Encoding', 'gzip')
+                    self.send_header('Content-Length', str(len(gz_bytes)))
+                    self.send_header('Cache-Control', 'no-cache')
+                    self.end_headers()
+                    self._safe_write(gz_bytes)
+                else:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/html; charset=utf-8')
+                    self.send_header('Content-Length', str(len(raw_bytes)))
+                    self.send_header('Cache-Control', 'no-cache')
+                    self.end_headers()
+                    self._safe_write(raw_bytes)
             except Exception:
                 pass
         else:
@@ -373,8 +432,7 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
             end_date=(body or {}).get('end_date'),
             filter_outliers=bool((body or {}).get('filter_outliers', True))
         )
-        self._set_json_headers(200)
-        self._safe_write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+        self._send_json_response(res, 200)
 
     def _handle_overseas_backtest(self, body: dict):
         """Executes quantitative strategy backtest on loaded overseas CDT data."""
@@ -385,13 +443,11 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
             if target:
                 mgr.load_sources(target)
         if mgr.current_df.empty:
-            self._set_json_headers(200)
-            self._safe_write(json.dumps({"status": "error", "message": "로드된 해외선물 CDT 데이터가 없습니다. 먼저 CDT 파일을 로드해주세요."}).encode('utf-8'))
+            self._send_json_response({"status": "error", "message": "로드된 해외선물 CDT 데이터가 없습니다. 먼저 CDT 파일을 로드해주세요."}, 200)
             return
 
         res = mgr.run_backtest(body or {})
-        self._set_json_headers(200)
-        self._safe_write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+        self._send_json_response(res, 200)
 
     def _handle_status(self):
         from config import load_settings
@@ -643,8 +699,7 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
             "chart_data": chart_data
         }
 
-        self._set_json_headers(200)
-        self._safe_write(json.dumps(resp).encode('utf-8'))
+        self._send_json_response(resp, 200)
 
     def _handle_backtest(self, body: dict):
         from engine.tracker import tracker
@@ -882,8 +937,7 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
             "chart_data": chart_data
         }
 
-        self._set_json_headers(200)
-        self._safe_write(json.dumps(response_payload).encode('utf-8'))
+        self._send_json_response(response_payload, 200)
 
     def _handle_export_csv(self, parsed):
         params = parse_qs(parsed.query)
@@ -1154,8 +1208,7 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
         tick_size = int(params.get('tick_size', [str(km.tick_size)])[0])
         limit = int(params.get('limit', ['300'])[0])
         data = km.get_chart_data(tick_size=tick_size, limit=limit)
-        self._set_json_headers(200)
-        self._safe_write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+        self._send_json_response(data, 200)
 
     def _handle_kiwoom_set_tick_size(self, body: dict):
         """Changes active real-time tick resolution and rebuilds bars dynamically."""

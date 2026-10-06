@@ -650,19 +650,22 @@ class Resampler:
         close = pd.to_numeric(bars_df['close'], errors='coerce')
         indicators = {}
 
+        def _clean_list(series: pd.Series) -> List[Any]:
+            return series.where(series.notnull(), None).tolist()
+
         # 1. Moving Averages (5, 10, 20, 60, 120)
         for p in [5, 10, 20, 60, 120]:
             ma = close.rolling(window=p, min_periods=1).mean().round(2)
-            indicators[f'sma_{p}'] = [None if np.isnan(v) else float(v) for v in ma]
+            indicators[f'sma_{p}'] = _clean_list(ma)
 
         # 2. Bollinger Bands (20, 2.0)
-        bb_mid = close.rolling(window=20, min_periods=1).mean()
+        bb_mid = close.rolling(window=20, min_periods=1).mean().round(2)
         bb_std = close.rolling(window=20, min_periods=1).std().fillna(0)
         bb_upper = (bb_mid + 2.0 * bb_std).round(2)
         bb_lower = (bb_mid - 2.0 * bb_std).round(2)
-        indicators['bb_upper'] = [None if np.isnan(v) else float(v) for v in bb_upper]
-        indicators['bb_mid'] = [None if np.isnan(v) else float(v) for v in bb_mid.round(2)]
-        indicators['bb_lower'] = [None if np.isnan(v) else float(v) for v in bb_lower]
+        indicators['bb_upper'] = _clean_list(bb_upper)
+        indicators['bb_mid'] = _clean_list(bb_mid)
+        indicators['bb_lower'] = _clean_list(bb_lower)
 
         # 3. RSI (14)
         delta = close.diff()
@@ -673,7 +676,7 @@ class Resampler:
         rs = avg_gain / avg_loss.replace(0, np.nan)
         rsi = 100.0 - (100.0 / (1.0 + rs))
         rsi = rsi.fillna(50.0).round(2)
-        indicators['rsi_14'] = [None if np.isnan(v) else float(v) for v in rsi]
+        indicators['rsi_14'] = _clean_list(rsi)
 
         # 4. MACD (12, 26, 9)
         ema_fast = close.ewm(span=12, adjust=False).mean()
@@ -681,9 +684,9 @@ class Resampler:
         macd_line = (ema_fast - ema_slow).round(2)
         macd_signal = macd_line.ewm(span=9, adjust=False).mean().round(2)
         macd_hist = (macd_line - macd_signal).round(2)
-        indicators['macd_line'] = [None if np.isnan(v) else float(v) for v in macd_line]
-        indicators['macd_signal'] = [None if np.isnan(v) else float(v) for v in macd_signal]
-        indicators['macd_hist'] = [None if np.isnan(v) else float(v) for v in macd_hist]
+        indicators['macd_line'] = _clean_list(macd_line)
+        indicators['macd_signal'] = _clean_list(macd_signal)
+        indicators['macd_hist'] = _clean_list(macd_hist)
 
         return indicators
 

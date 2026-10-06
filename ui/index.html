@@ -4408,6 +4408,7 @@ ${kw.params}
             }
             
             progressPollTimer = setInterval(async () => {
+                if (document.hidden) return;
                 try {
                     const res = await fetch('/api/progress');
                     const data = await res.json();
@@ -4455,7 +4456,7 @@ ${kw.params}
 
                     document.getElementById("prog-detail").innerText = data.details || "";
                 } catch(e) {}
-            }, 200);
+            }, 400);
         }
 
         function stopProgressPolling() {
@@ -6446,6 +6447,7 @@ ${kw.params}
             stopRealtimePolling();
             if (currentMarketMode !== 'MOCK') return;
             realtimeTickTimer = setInterval(() => {
+                if (document.hidden) return;
                 if (currentMarketMode === 'MOCK' && !isRealtimePaused) {
                     fetchRealtimeBars(false);
                 }
@@ -6781,6 +6783,7 @@ ${kw.params}
         }
 
         async function pollDlProgress() {
+            if (document.hidden) return;
             try {
                 const res = await fetch('/api/dl/progress');
                 const data = await res.json();
@@ -6844,6 +6847,12 @@ ${kw.params}
             await fetchKiwoomConfigAndStatus();
             quickSelectTickSize(10000);
             switchMarketMode('DOMESTIC');
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && currentMarketMode === 'MOCK' && !isRealtimePaused) {
+                    fetchRealtimeBars(false);
+                }
+            });
         });
     </script>
 </body>

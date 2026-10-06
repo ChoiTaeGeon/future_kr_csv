@@ -532,10 +532,9 @@ def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
         VolatilityIndicators.rvi(df)
     ]
     
-    result = df.copy()
-    for ind_df in dfs:
-        for col in ind_df.columns:
-            result[col] = ind_df[col]
+    valid_dfs = [df] + [d for d in dfs if not d.empty]
+    result = pd.concat(valid_dfs, axis=1)
+    result = result.loc[:, ~result.columns.duplicated()].copy()
 
     # --- Price Action & Candle Structure for Contrarian Scalping ---
     high = result['high'].values

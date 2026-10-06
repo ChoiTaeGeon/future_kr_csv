@@ -99,6 +99,9 @@ def run_pipeline(
         return
 
     df_full_ticks = pd.concat(all_clean_ticks, ignore_index=True)
+    del all_clean_ticks
+    import gc
+    gc.collect()
     tracker.log(f"[+] Total Cleaned Ticks in Memory: {len(df_full_ticks):,}")
 
     # -------------------------------------------------------------
@@ -132,6 +135,8 @@ def run_pipeline(
                 tick_bars_dict[w] = df_bars
         tracker.update_stage_step(1, f"Window {w} ({len(tick_bars_dict.get(w, [])):,} bars)")
 
+    del df_full_ticks
+    gc.collect()
     tracker.finish_stage(f"Generated Bars for {len(tick_bars_dict)} Windows")
 
     # -------------------------------------------------------------
@@ -277,6 +282,10 @@ def run_pipeline(
                 }
                 all_evaluation_results.append(combo_result)
                 trained_model_registry_cache[f"{w}_{m_name}"] = (last_trained_model, fcols, combo_result)
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
 
             tracker.update_stage_step(1, f"Tick {w} × {m_name}")
 

@@ -131,7 +131,15 @@ class DataEngine:
                 raise
 
     def _init_db(self):
-        """Initialize required tables and indexes."""
+        """Initialize required tables and indexes with optimized resource PRAGMAs."""
+        # 0. Performance & resource optimization pragmas
+        try:
+            self.conn.execute("PRAGMA memory_limit = '4GB'")
+            self.conn.execute("PRAGMA threads = 4")
+            self.conn.execute("PRAGMA preserve_insertion_order = false")
+        except Exception:
+            pass
+
         # 1. Sync metadata table to track loaded CSV files
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS sync_metadata (

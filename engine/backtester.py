@@ -51,24 +51,21 @@ class Backtester:
         df = df_bars.copy().reset_index(drop=True)
         signal = signal.copy().reset_index(drop=True)
         
-        # Datetime handling for EOD liquidation
+        # Datetime handling
         ts_series = pd.to_datetime(df['timestamp'])
-        df['time_str'] = ts_series.dt.strftime("%H:%M:%S")
-        df['date_str'] = ts_series.dt.strftime("%Y-%m-%d")
-        df['year_str'] = ts_series.dt.strftime("%Y")
-        df['month_str'] = ts_series.dt.strftime("%Y-%m")
 
         # 1. Position tracking (Next-bar execution to prevent lookahead bias)
-        # Position at bar t is based on signal generated at bar t-1
         raw_position = signal.shift(1).fillna(0).astype(int)
         
         if not self.config.allow_short:
             raw_position = raw_position.clip(lower=0)
 
-        # 2. Intraday EOD Forced Liquidation (Optional: disabled when eod_close_time is 'NONE', '24H', or 'OFF')
+        # 2. Intraday EOD Forced Liquidation (Only compute string formatting when EOD is enabled)
         eod_cfg = str(self.config.eod_close_time or '').upper().strip()
         if eod_cfg and eod_cfg not in ["NONE", "24H", "OFF", "FALSE", ""]:
-            is_eod = (df['time_str'] >= self.config.eod_close_time) | (df['date_str'] != df['date_str'].shift(-1))
+            time_str = ts_series.dt.strftime("%H:%M:%S")
+            date_str = ts_series.dt.strftime("%Y-%m-%d")
+            is_eod = (time_str >= self.config.eod_close_time) | (date_str != date_str.shift(-1))
             position = np.where(is_eod, 0, raw_position)
         else:
             position = raw_position
@@ -133,7 +130,7 @@ class Backtester:
         else:
             annualized_return_pct = total_return_pct
 
-        daily_ret = pd.DataFrame({'date': df['date_str'], 'bar_ret': bar_ret}).groupby('date')['bar_ret'].sum()
+        daily_ret = pd.DataFrame({'date': ts_series.dt.date, 'bar_ret': bar_ret}).groupby('date')['bar_ret'].sum()
         ann_vol = daily_ret.std() * np.sqrt(252) * 100.0 if len(daily_ret) > 1 else 0.0
         ann_ret_dec = (daily_ret.mean() * 252) if len(daily_ret) > 0 else 0.0
         
@@ -150,8 +147,8 @@ class Backtester:
             'equity': equity,
             'equity_pct': equity_pct,
             'drawdown_pct': drawdown_pct,
-            'year': df['year_str'],
-            'month': df['month_str']
+            'year': ts_series.dt.year.astype(str),
+            'month': ts_series.dt.strftime("%Y-%m")
         })
 
         # Yearly & Monthly Breakdown
