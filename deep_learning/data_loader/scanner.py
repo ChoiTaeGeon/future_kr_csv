@@ -294,10 +294,11 @@ class TickDataScanner:
             low_memory=False
         )
 
-        # Standardize column naming
-        reverse_map = {idx: name for name, idx in col_map.items()}
-        new_cols = [reverse_map.get(c, f"col_{c}") for c in df_raw.columns]
-        df_raw.columns = new_cols
+        # Standardize column naming based on positional usecols
+        col_names = ['time', 'price', 'volume']
+        if 'side' in col_map:
+            col_names.append('side')
+        df_raw.columns = col_names
 
         total_ticks = len(df_raw)
 
