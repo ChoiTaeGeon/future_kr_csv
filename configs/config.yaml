@@ -1,81 +1,54 @@
-# ==============================================================================
-# 코스피200선물 딥러닝/전이학습 퀀트 트레이딩 시스템 환경설정
-# ==============================================================================
-
-# 1. 데이터 소스 경로
-# 틱데이터 CSV 파일 폴더 (CLI 인자 --data-dir 로 오버라이드 가능)
-data_dir: "csv"
-symbol: "KOSPI_F"
-cache_dir: "data/dl_cache"
-
-# 2. 틱 주기 윈도우 생성 설정
-# 사용자가 시작값(start)/종료값(end)/간격값(step)을 자유롭게 변경 가능
-# 예: start=100, end=1000, step=10 -> 91개 주기
-#     start=200, end=5000, step=100 -> 49개 주기
+data_dir: E:\자료\5.투자시뮬\국내선물옵션\틱데이터csv
+symbol: KOSPI_F
+cache_dir: data/dl_cache
 tick_window:
-  start: 100
-  end: 1000
-  step: 10
-
-# 2단계(coarse-to-fine) 탐색 여부
-# true: 1차로 넓은 간격 대표 주기를 빠르게 스크리닝 후 상위 구간 근방만 세밀 재탐색
-# false: 전체 주기 전수조사 모드
+  start: 180
+  end: 200
+  step: 20
 coarse_to_fine:
   enabled: true
-  coarse_step: 100        # 1차 스크리닝 간격 (예: 100, 200, ..., 1000)
-  top_n_regions: 2        # 성과 상위 대표 주기 개수
-  fine_neighborhood: 50   # 상위 주기 ±50 범위를 원래 step(10) 단위로 세밀 탐색
-
-# 3. 거래 비용 모델 (코스피200선물 실제 수수료+거래세 반영)
+  coarse_step: 100
+  top_n_regions: 2
+  fine_neighborhood: 50
 cost_model:
-  commission_rate: 0.00003     # 편도 수수료율 (왕복 시 2배 반영)
-  slippage_mode: "fixed_and_volume"  # 'fixed', 'volume', 'fixed_and_volume'
-  fixed_slippage_tick: 0.05    # 코스피200선물 1틱 = 0.05pt
-  tick_value_krw: 250000       # 코스피200선물 승수 (1pt = 250,000원)
-  volume_impact_coef: 0.00001  # 체결량 대비 슬리피지 계수
-
-# 4. 검증 방법론 (Walk-Forward + Purged K-Fold & Embargo)
+  commission_rate: 3.0e-05
+  slippage_mode: fixed_and_volume
+  fixed_slippage_tick: 0.05
+  tick_value_krw: 250000
+  volume_impact_coef: 1.0e-05
 validation:
-  mode: "walk_forward"         # 'walk_forward' or 'purged_kfold'
-  train_years: 2.0             # 롤링 윈도우 학습 기간 (년)
-  test_months: 6.0             # 롤링 윈도우 검증 기간 (월)
-  embargo_pct: 0.01            # 라벨 중첩 누수 방지 엠바고 비율 (1%)
-
-# 5. 모델링 파라미터
+  mode: walk_forward
+  train_years: 2
+  test_months: 6
+  embargo_pct: 0.01
 modeling:
-  task_type: "multiclass"      # 'multiclass' (1: 매수, 0: 관망, -1: 매도) 또는 'regression'
+  task_type: multiclass
   models_to_run:
-    - "logistic_regression"
-    - "random_forest"
-    - "xgboost"
-    - "lightgbm"
-    - "patch_tst"
-    - "foundation_ts"
-  optuna_trials: 15            # 트리 모델 하이퍼파라미터 튜닝 시도 횟수
+  - logistic_regression
+  - random_forest
+  - xgboost
+  - lightgbm
+  - patch_tst
+  - foundation_ts
+  optuna_trials: 15
   deep_learning:
     epochs: 20
     batch_size: 64
     learning_rate: 0.001
-    seq_len: 32                # 시계열 입력 윈도우 길이 (틱바 수)
+    seq_len: 32
     patch_size: 4
-
-# 6. 최적 전략 선정 기준
 selection_criteria:
-  min_trades: 30               # 최소 거래 횟수
-  min_sharpe: 1.0              # 샤프비율 하한선
-  max_mdd_pct: 25.0            # MDD 상한선 (%)
-  consistency_ratio: 0.6       # Walk-Forward 구간 중 수익 구간 비율
-
-# 7. 모델 저장 및 드리프트 모니터링
-model_save_dir: "models/saved_models"
-registry_path: "models/registry.json"
+  min_trades: 30
+  min_sharpe: 1
+  max_mdd_pct: 25
+  consistency_ratio: 0.6
+model_save_dir: models/saved_models
+registry_path: models/registry.json
 drift_monitoring:
-  lookback_bars: 1000          # 드리프트 탐지 윈도우
-  psi_threshold: 0.25          # PSI 임계치 (0.25 초과 시 심각한 드리프트 판정)
-
-# 8. 진행률 및 실시간 ETA 표시
+  lookback_bars: 1000
+  psi_threshold: 0.25
 progress_display:
   enabled: true
-  update_interval_sec: 1.0
+  update_interval_sec: 1
   log_to_file: true
-  log_file_path: "logs/deep_learning_pipeline.log"
+  log_file_path: logs/deep_learning_pipeline.log

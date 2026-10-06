@@ -32,28 +32,48 @@ $ProgressPreference = 'SilentlyContinue'
 $title = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{title_b64}'))
 $init = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{init_b64}'))
 
-$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-$dialog.Description = $title
-$dialog.ShowNewFolderButton = $true
-if ($init -and (Test-Path $init)) {{
-    $dialog.SelectedPath = $init
+# Try COM Shell.Application first for native modern Windows explorer dialog
+$selectedPath = $null
+try {{
+    $shell = New-Object -ComObject Shell.Application
+    # 0x00000010 = BIF_EDITBOX, 0x00000040 = BIF_NEWDIALOGSTYLE
+    $folder = $shell.BrowseForFolder(0, $title, 0x00000050, $init)
+    if ($folder -and $folder.Self) {{
+        $selectedPath = $folder.Self.Path
+    }}
+}} catch {{
+    $selectedPath = $null
 }}
 
-$form = New-Object System.Windows.Forms.Form
-$form.TopMost = $true
-$form.Width = 1
-$form.Height = 1
-$form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
-$form.Show()
-$form.Activate()
-$form.BringToFront()
+# Fallback to TopMost Windows Forms FolderBrowserDialog if Shell was not used
+if (-not $selectedPath) {{
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = $title
+    $dialog.ShowNewFolderButton = $true
+    if ($init -and (Test-Path $init)) {{
+        $dialog.SelectedPath = $init
+    }}
 
-$result = $dialog.ShowDialog($form)
-$form.Close()
-$form.Dispose()
+    $form = New-Object System.Windows.Forms.Form
+    $form.TopMost = $true
+    $form.Width = 10
+    $form.Height = 10
+    $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+    $form.Show()
+    $form.Activate()
+    $form.BringToFront()
 
-if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($dialog.SelectedPath)
+    $result = $dialog.ShowDialog($form)
+    $form.Close()
+    $form.Dispose()
+
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
+        $selectedPath = $dialog.SelectedPath
+    }}
+}}
+
+if ($selectedPath) {{
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($selectedPath)
     $outB64 = [Convert]::ToBase64String($bytes)
     [Console]::WriteLine("RESULT_B64:" + $outB64)
 }} else {{
@@ -64,7 +84,7 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
     cmd = ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded_cmd]
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=180)
+        proc = subprocess.run(cmd, capture_output=True, timeout=60)
         stdout = proc.stdout.decode("utf-8", errors="replace")
         for line in stdout.splitlines():
             line = line.strip()
@@ -133,7 +153,7 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
     cmd = ["powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded_cmd]
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=180)
+        proc = subprocess.run(cmd, capture_output=True, timeout=60)
         stdout = proc.stdout.decode("utf-8", errors="replace")
         for line in stdout.splitlines():
             line = line.strip()
