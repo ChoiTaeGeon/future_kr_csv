@@ -518,6 +518,10 @@ class KiwoomManager:
             else:
                 indicators["vwap"] = [float(v) for v in closes]
 
+        # Recent tick stream slice (last 30 ticks)
+        ticks_slice = list(self.raw_ticks)[-30:] if self.raw_ticks else []
+        recent_ticks = [{"time": t[0], "price": t[1], "volume": t[2]} for t in reversed(ticks_slice)]
+
         return {
             "status": "success",
             "symbol": self.symbol,
@@ -530,6 +534,8 @@ class KiwoomManager:
                 "closes": closes,
                 "volumes": volumes
             },
+            "recent_ticks": recent_ticks,
+            "recent_bars": [dict(b) for b in sub_bars[-20:]],
             "indicators": indicators,
             "latest_quote": {
                 "price": self.current_price,

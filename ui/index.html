@@ -736,8 +736,8 @@
         </div>
     </header>
 
-    <!-- Market Mode Selector (국내선물 vs 해외선물) -->
-    <div style="margin: 12px 24px 0 24px; display: flex; align-items: center; justify-content: space-between; z-index: 10;">
+    <!-- Market Mode Selector (국내선물 vs 해외선물 vs 실시간 모의매매) -->
+    <div style="margin: 12px 24px 0 24px; display: flex; align-items: center; justify-content: space-between; z-index: 10; flex-wrap: wrap; gap: 8px;">
         <div style="display: flex; gap: 6px; background: rgba(14, 22, 44, 0.75); padding: 4px; border-radius: 12px; border: 1px solid var(--glass-border); box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
             <button id="tab-mode-domestic" class="btn active-mode-tab" onclick="switchMarketMode('DOMESTIC')" style="padding: 8px 18px; font-size: 0.85rem; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-won-sign" style="color: var(--accent-cyan);"></i> 국내선물 (KOSPI 200 CSV)
@@ -745,9 +745,12 @@
             <button id="tab-mode-overseas" class="btn" onclick="switchMarketMode('OVERSEAS')" style="padding: 8px 18px; font-size: 0.85rem; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; color: var(--text-muted); background: transparent; display: flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-globe" style="color: #f59e0b;"></i> 해외선물 (Global Futures CDT / CSV)
             </button>
+            <button id="tab-mode-mock" class="btn" onclick="switchMarketMode('MOCK')" style="padding: 8px 18px; font-size: 0.85rem; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; color: var(--text-muted); background: transparent; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-tower-broadcast" style="color: #10b981;"></i> 실시간 모의매매 (Kiwoom Live)
+            </button>
         </div>
-        <div id="overseas-quick-info" style="display: none; align-items: center; gap: 8px; font-size: 0.8rem; color: #f59e0b; font-family: 'JetBrains Mono', monospace; font-weight: 600;">
-            <i class="fa-solid fa-bolt"></i> CDT 캔들 바이너리 고속 파싱 & 중복제거 모드
+        <div id="mode-quick-info" style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent-cyan);">
+            <i class="fa-solid fa-bolt"></i> <span id="mode-quick-info-text">DuckDB 고속 벡터 백테스트 & 30개 지표 분석 모드</span>
         </div>
     </div>
 
@@ -758,82 +761,6 @@
 
             <!-- Domestic Futures Sidebar -->
             <div id="sidebar-domestic-container" style="display: flex; flex-direction: column; gap: 14px;">
-
-                <!-- KIWOOM OPENAPI CONNECTION CARD -->
-                <div class="step-card" id="kiwoom-connection-card" style="border: 1px solid rgba(0, 242, 254, 0.35); background: linear-gradient(145deg, rgba(14, 26, 52, 0.75), rgba(8, 14, 28, 0.65));">
-                    <div class="step-header" style="justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span class="step-badge" style="background: linear-gradient(135deg, #00f2fe, #8b5cf6); color: #060913; font-weight: 800;">KIWOOM</span>
-                            <span class="step-title" style="color: #fff;">키움 국내선물 자동접속</span>
-                        </div>
-                        <span id="kw-status-pill" class="badge" style="font-size: 0.72rem; padding: 3px 8px; background: rgba(148, 163, 184, 0.2); color: #94a3b8;">미접속</span>
-                    </div>
-
-                    <!-- Server Type Selector -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
-                        <button type="button" id="kw-btn-mock" class="btn btn-secondary" onclick="selectKiwoomServer('mock')" style="padding: 6px; font-size: 0.75rem; justify-content: center; border-color: var(--accent-cyan); color: #fff;">
-                            <i class="fa-solid fa-shield-halved"></i> 모의투자
-                        </button>
-                        <button type="button" id="kw-btn-real" class="btn btn-secondary" onclick="selectKiwoomServer('real')" style="padding: 6px; font-size: 0.75rem; justify-content: center; color: var(--text-muted);">
-                            <i class="fa-solid fa-bolt"></i> 실거래 서버
-                        </button>
-                    </div>
-
-                    <!-- Credentials Inputs -->
-                    <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                            <div>
-                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">아이디 (ID)</label>
-                                <input type="text" id="kw-user-id" class="input-field" placeholder="예: kthood79" style="font-size: 0.8rem; padding: 6px 10px;">
-                            </div>
-                            <div>
-                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">계좌번호 (선물)</label>
-                                <input type="text" id="kw-account-no" class="input-field" placeholder="예: 50123456-01" style="font-size: 0.8rem; padding: 6px 10px;">
-                            </div>
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                            <div>
-                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">계좌 비밀번호</label>
-                                <div style="position: relative;">
-                                    <input type="password" id="kw-account-pw" class="input-field" placeholder="••••••••" style="font-size: 0.8rem; padding: 6px 28px 6px 10px; width: 100%;">
-                                    <i class="fa-regular fa-eye" id="kw-eye-acct" onclick="togglePwVisibility('kw-account-pw', 'kw-eye-acct')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; cursor: pointer; color: var(--text-dim);"></i>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">인증서/접속 비번</label>
-                                <div style="position: relative;">
-                                    <input type="password" id="kw-cert-pw" class="input-field" placeholder="••••••••" style="font-size: 0.8rem; padding: 6px 28px 6px 10px; width: 100%;">
-                                    <i class="fa-regular fa-eye" id="kw-eye-cert" onclick="togglePwVisibility('kw-cert-pw', 'kw-eye-cert')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; cursor: pointer; color: var(--text-dim);"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Checkboxes: Remember & Auto-Connect -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 4px 0; font-size: 0.75rem;">
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-main);">
-                            <input type="checkbox" id="kw-remember-creds" checked>
-                            <span>계정/비밀번호 기억</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--accent-cyan); font-weight: 600;">
-                            <input type="checkbox" id="kw-auto-connect">
-                            <span>시작 시 자동접속</span>
-                        </label>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 6px;">
-                        <button class="btn btn-primary" id="kw-btn-connect" onclick="connectKiwoom()" style="padding: 8px 10px; font-size: 0.78rem; justify-content: center;">
-                            <i class="fa-solid fa-plug"></i> <span id="kw-btn-text">키움 서버 접속</span>
-                        </button>
-                        <button class="btn btn-secondary" onclick="disconnectKiwoom()" style="padding: 8px 8px; font-size: 0.78rem; justify-content: center; border-color: rgba(244,63,94,0.4); color: var(--accent-rose);">
-                            <i class="fa-solid fa-power-off"></i> 해제
-                        </button>
-                    </div>
-                    <div id="kw-status-detail" style="font-size: 0.7rem; color: var(--text-dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 4px;">
-                        <i class="fa-solid fa-circle-info"></i> <span id="kw-status-msg">설정 확인 후 접속 버튼을 누르세요.</span>
-                    </div>
-                </div>
 
                 <!-- STEP 1: Data Source -->
                 <div class="step-card">
@@ -1285,12 +1212,160 @@
                     </div>
                 </details>
             </div>
+
+            <!-- Dedicated Mock Trading (Kiwoom Live) Sidebar -->
+            <div id="sidebar-mock-container" style="display: none; flex-direction: column; gap: 14px;">
+
+                <!-- KIWOOM OPENAPI CONNECTION CARD -->
+                <div class="step-card" id="kiwoom-connection-card" style="border: 1px solid rgba(16, 185, 129, 0.4); background: linear-gradient(145deg, rgba(10, 30, 45, 0.8), rgba(8, 16, 30, 0.7));">
+                    <div class="step-header" style="justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="step-badge" style="background: linear-gradient(135deg, #10b981, #00f2fe); color: #060913; font-weight: 800;">OPENAPI</span>
+                            <span class="step-title" style="color: #fff;">키움증권 서버 자동접속</span>
+                        </div>
+                        <span id="kw-status-pill" class="badge" style="font-size: 0.72rem; padding: 3px 8px; background: rgba(148, 163, 184, 0.2); color: #94a3b8;">미접속</span>
+                    </div>
+
+                    <!-- Server Type Selector -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+                        <button type="button" id="kw-btn-mock" class="btn btn-secondary" onclick="selectKiwoomServer('mock')" style="padding: 6px; font-size: 0.75rem; justify-content: center; border-color: var(--accent-emerald); color: #fff;">
+                            <i class="fa-solid fa-shield-halved"></i> 모의투자
+                        </button>
+                        <button type="button" id="kw-btn-real" class="btn btn-secondary" onclick="selectKiwoomServer('real')" style="padding: 6px; font-size: 0.75rem; justify-content: center; color: var(--text-muted);">
+                            <i class="fa-solid fa-bolt"></i> 실거래 서버
+                        </button>
+                    </div>
+
+                    <!-- Credentials Inputs -->
+                    <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <div>
+                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">아이디 (ID)</label>
+                                <input type="text" id="kw-user-id" class="input-field" placeholder="예: kthood79" style="font-size: 0.8rem; padding: 6px 10px;">
+                            </div>
+                            <div>
+                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">계좌번호 (선물)</label>
+                                <input type="text" id="kw-account-no" class="input-field" placeholder="예: 50123456-01" style="font-size: 0.8rem; padding: 6px 10px;">
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <div>
+                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">계좌 비밀번호</label>
+                                <div style="position: relative;">
+                                    <input type="password" id="kw-account-pw" class="input-field" placeholder="••••••••" style="font-size: 0.8rem; padding: 6px 28px 6px 10px; width: 100%;">
+                                    <i class="fa-regular fa-eye" id="kw-eye-acct" onclick="togglePwVisibility('kw-account-pw', 'kw-eye-acct')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; cursor: pointer; color: var(--text-dim);"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">인증서/접속 비번</label>
+                                <div style="position: relative;">
+                                    <input type="password" id="kw-cert-pw" class="input-field" placeholder="••••••••" style="font-size: 0.8rem; padding: 6px 28px 6px 10px; width: 100%;">
+                                    <i class="fa-regular fa-eye" id="kw-eye-cert" onclick="togglePwVisibility('kw-cert-pw', 'kw-eye-cert')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; cursor: pointer; color: var(--text-dim);"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Checkboxes: Remember & Auto-Connect -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 4px 0; font-size: 0.75rem;">
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-main);">
+                            <input type="checkbox" id="kw-remember-creds" checked>
+                            <span>계정/비밀번호 기억</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--accent-emerald); font-weight: 600;">
+                            <input type="checkbox" id="kw-auto-connect">
+                            <span>시작 시 자동접속</span>
+                        </label>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 6px;">
+                        <button class="btn btn-primary" id="kw-btn-connect" onclick="connectKiwoom()" style="padding: 8px 10px; font-size: 0.78rem; justify-content: center; background: linear-gradient(135deg, #059669, #10b981);">
+                            <i class="fa-solid fa-plug"></i> <span id="kw-btn-text">키움 서버 접속</span>
+                        </button>
+                        <button class="btn btn-secondary" onclick="disconnectKiwoom()" style="padding: 8px 8px; font-size: 0.78rem; justify-content: center; border-color: rgba(244,63,94,0.4); color: var(--accent-rose);">
+                            <i class="fa-solid fa-power-off"></i> 해제
+                        </button>
+                    </div>
+                    <div id="kw-status-detail" style="font-size: 0.7rem; color: var(--text-dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 4px;">
+                        <i class="fa-solid fa-circle-info"></i> <span id="kw-status-msg">설정 확인 후 접속 버튼을 누르세요.</span>
+                    </div>
+                </div>
+
+                <!-- MOCK ORDER & POSITION CARD -->
+                <div class="step-card" id="mock-order-panel-card" style="border: 1px solid rgba(0, 242, 254, 0.35); background: linear-gradient(145deg, rgba(14, 26, 52, 0.75), rgba(8, 14, 28, 0.65));">
+                    <div class="step-header">
+                        <span class="step-badge" style="background: linear-gradient(135deg, #00f2fe, #8b5cf6); color: #060913; font-weight: 800;">ORDER</span>
+                        <span class="step-title">실시간 모의주문 & 포지션</span>
+                    </div>
+
+                    <!-- Account Summary in Card -->
+                    <div style="background: rgba(10, 16, 32, 0.75); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 4px;">
+                            <span style="color: var(--text-dim);">모의투자 예수금:</span>
+                            <span style="font-weight: 700; color: #fff; font-family: 'JetBrains Mono', monospace;" id="mock-card-balance">100,000,000 원</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 4px;">
+                            <span style="color: var(--text-dim);">보유 포지션:</span>
+                            <span style="font-weight: 700; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace;" id="mock-card-pos">무포지션 (0)</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                            <span style="color: var(--text-dim);">실시간 평가손익:</span>
+                            <span style="font-weight: 800; font-family: 'JetBrains Mono', monospace;" id="mock-card-pnl">+0 원 (0.00%)</span>
+                        </div>
+                    </div>
+
+                    <!-- Order Action Buttons -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+                        <button type="button" class="btn" onclick="executeMockOrder('BUY')" style="padding: 10px; font-size: 0.82rem; font-weight: 800; justify-content: center; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(239,68,68,0.3);">
+                            <i class="fa-solid fa-arrow-trend-up"></i> 매수 1계약 (Buy)
+                        </button>
+                        <button type="button" class="btn" onclick="executeMockOrder('SELL')" style="padding: 10px; font-size: 0.82rem; font-weight: 800; justify-content: center; background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(59,130,246,0.3);">
+                            <i class="fa-solid fa-arrow-trend-down"></i> 매도 1계약 (Sell)
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="executeMockOrder('CLOSE')" style="width: 100%; padding: 8px; font-size: 0.78rem; font-weight: 700; justify-content: center; border-color: rgba(245,158,11,0.5); color: #f59e0b;">
+                        <i class="fa-solid fa-hand-holding-dollar"></i> 전량 즉시 시장가 청산 (Close)
+                    </button>
+                </div>
+
+                <!-- REALTIME FEED SETTINGS CARD -->
+                <div class="step-card" id="mock-feed-settings-card">
+                    <div class="step-header">
+                        <span class="step-badge" style="background: rgba(255,255,255,0.1); color: #fff;">FEED</span>
+                        <span class="step-title">실시간 스트리밍 제어</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+                            <span style="color: var(--text-dim);">스트리밍 동작:</span>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn btn-secondary" id="rt-btn-pause-side" onclick="toggleRealtimeStreaming()" style="padding: 4px 10px; font-size: 0.74rem;">
+                                    <i class="fa-solid fa-pause"></i> 일시정지 / 재개
+                                </button>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+                            <span style="color: var(--text-dim);">시뮬레이션 배속:</span>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="btn btn-secondary" onclick="setRealtimeSpeed(1.0)" style="padding: 3px 8px; font-size: 0.72rem;">1x</button>
+                                <button class="btn btn-secondary" onclick="setRealtimeSpeed(5.0)" style="padding: 3px 8px; font-size: 0.72rem;">5x</button>
+                                <button class="btn btn-secondary" onclick="setRealtimeSpeed(10.0)" style="padding: 3px 8px; font-size: 0.72rem;">10x</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 6px;">
+                            <span style="color: var(--text-dim);">선물 승수 / 틱가치:</span>
+                            <span style="color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;">250,000원 / 0.05pt</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
 
         <!-- Right Content -->
         <div class="content-area">
-            <!-- Metrics Row -->
-            <div class="metrics-grid">
+            <!-- Backtest Metrics Row (Domestic & Overseas) -->
+            <div class="metrics-grid" id="metrics-grid-backtest">
                 <div class="glass-card metric-card emerald">
                     <span class="metric-title">Best Return</span>
                     <span class="metric-val" id="metric-return">+0.00%</span>
@@ -1313,6 +1388,30 @@
                 </div>
             </div>
 
+            <!-- Real-time Mock Trading Metrics Row (Mock Tab Only) -->
+            <div class="metrics-grid" id="metrics-grid-mock" style="display: none;">
+                <div class="glass-card metric-card rose">
+                    <span class="metric-title"><i class="fa-solid fa-won-sign"></i> KOSPI 200 실시간 현재가</span>
+                    <span class="metric-val" id="mock-metric-price" style="font-size: 1.6rem; color: #ef4444;">-</span>
+                    <span class="metric-sub" id="mock-metric-change">전일대비: -</span>
+                </div>
+                <div class="glass-card metric-card emerald">
+                    <span class="metric-title"><i class="fa-solid fa-wallet"></i> 모의계좌 실시간 평가손익</span>
+                    <span class="metric-val" id="mock-metric-pnl" style="font-size: 1.55rem; color: #10b981;">0 원</span>
+                    <span class="metric-sub" id="mock-metric-pnl-pct">수익률: +0.00%</span>
+                </div>
+                <div class="glass-card metric-card">
+                    <span class="metric-title"><i class="fa-solid fa-gauge-high"></i> 실시간 틱 수신 속도 (TPS)</span>
+                    <span class="metric-val" id="mock-metric-tps" style="font-size: 1.55rem; color: var(--accent-cyan);">0.0 TPS</span>
+                    <span class="metric-sub" id="mock-metric-total-ticks">누적 수신: 0 틱</span>
+                </div>
+                <div class="glass-card metric-card purple">
+                    <span class="metric-title"><i class="fa-solid fa-chart-simple"></i> 활성 캔들 형성 진행률</span>
+                    <span class="metric-val" id="mock-metric-forming-pct" style="font-size: 1.55rem; color: #c084fc;">0.0%</span>
+                    <span class="metric-sub" id="mock-metric-forming-detail">0 / 60 틱 진행 중</span>
+                </div>
+            </div>
+
             <!-- Chart Card -->
             <div class="glass-card chart-card" style="position: relative;">
                 <div class="loader-overlay" id="chart-loader">
@@ -1323,17 +1422,9 @@
                 <div class="chart-header" style="flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 10px; margin-bottom: 10px;">
                     <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
-                            <i class="fa-solid fa-chart-candlestick" style="color: var(--accent-cyan);"></i>
+                            <i class="fa-solid fa-chart-candlestick" style="color: var(--accent-cyan);" id="chart-title-icon"></i>
                             <span id="chart-main-title">키움 국내선물 틱봉 차트</span>
-                        </div>
-                        <!-- Chart Mode Switcher: Historical Analysis vs Real-time Live -->
-                        <div style="display: flex; gap: 4px; background: rgba(10, 16, 32, 0.85); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
-                            <button type="button" id="btn-chart-mode-hist" class="btn btn-secondary active-mode-tab" onclick="switchChartFeedMode('HISTORICAL')" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700;">
-                                <i class="fa-solid fa-chart-line"></i> 분석 틱봉
-                            </button>
-                            <button type="button" id="btn-chart-mode-live" class="btn btn-secondary" onclick="switchChartFeedMode('REALTIME')" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700; color: #f43f5e; border-color: rgba(244,63,94,0.4);">
-                                <i class="fa-solid fa-bolt"></i> 실시간 틱차트 (LIVE)
-                            </button>
+                            <span id="chart-mode-badge" class="badge badge-emerald" style="font-size: 0.72rem; margin-left: 4px;">분석 모드</span>
                         </div>
                     </div>
 
@@ -1457,7 +1548,7 @@
             </div>
 
             <!-- Strategy Table Card -->
-            <div class="glass-card table-card">
+            <div class="glass-card table-card" id="table-card-ranking">
                 <div class="chart-header">
                     <div class="chart-title">
                         <i class="fa-solid fa-trophy" style="color: var(--accent-amber);"></i>
@@ -1507,6 +1598,93 @@
                             </tr>
                         </thead>
                         <tbody id="breakdown-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Live Mock Trading Tables Card (Mock Tab Only) -->
+            <div class="glass-card table-card" id="mock-trading-card" style="display: none;">
+                <div class="chart-header" style="justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-tower-broadcast" style="color: #10b981;"></i>
+                            <span>키움 OpenAPI 실시간 모의매매 & 틱 모니터링</span>
+                        </div>
+                        <div style="display: flex; gap: 4px; background: rgba(10, 16, 32, 0.85); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                            <button type="button" id="tab-mock-sub-ticks" class="btn btn-secondary active-mode-tab" onclick="switchMockSubTab('TICKS')" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700;">
+                                <i class="fa-solid fa-list-ol"></i> 실시간 틱 체결창
+                            </button>
+                            <button type="button" id="tab-mock-sub-bars" class="btn btn-secondary" onclick="switchMockSubTab('BARS')" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); background: transparent;">
+                                <i class="fa-solid fa-cubes-stacked"></i> 완성 캔들 히스토리
+                            </button>
+                            <button type="button" id="tab-mock-sub-orders" class="btn btn-secondary" onclick="switchMockSubTab('ORDERS')" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); background: transparent;">
+                                <i class="fa-solid fa-receipt"></i> 모의 주문/체결 내역
+                            </button>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.72rem;">
+                            <i class="fa-solid fa-circle-check"></i> 실시간 동기화 활성
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Sub-Panel 1: Live Ticks Table -->
+                <div id="mock-panel-ticks" class="perf-table-wrapper" style="max-height: 380px; overflow-y: auto;">
+                    <table class="perf-table">
+                        <thead>
+                            <tr>
+                                <th>체결시각</th>
+                                <th>체결가 (pt)</th>
+                                <th>체결수량 (계약)</th>
+                                <th>전일대비</th>
+                                <th>체결구분</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mock-ticks-tbody">
+                            <tr><td colspan="5" style="color: var(--text-dim); padding: 24px;">키움 서버에 연결되면 실시간 틱이 수신됩니다.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Sub-Panel 2: Completed Bars Table -->
+                <div id="mock-panel-bars" class="perf-table-wrapper" style="display: none; max-height: 380px; overflow-y: auto;">
+                    <table class="perf-table">
+                        <thead>
+                            <tr>
+                                <th>캔들 시작시각</th>
+                                <th>완성시각</th>
+                                <th>시가 (O)</th>
+                                <th>고가 (H)</th>
+                                <th>저가 (L)</th>
+                                <th>종가 (C)</th>
+                                <th>거래량 (V)</th>
+                                <th>틱수</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mock-bars-tbody">
+                            <tr><td colspan="8" style="color: var(--text-dim); padding: 24px;">캔들 데이터 수집 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Sub-Panel 3: Mock Order Executions -->
+                <div id="mock-panel-orders" class="perf-table-wrapper" style="display: none; max-height: 380px; overflow-y: auto;">
+                    <table class="perf-table">
+                        <thead>
+                            <tr>
+                                <th>주문시각</th>
+                                <th>종목</th>
+                                <th>구분</th>
+                                <th>수량</th>
+                                <th>체결단가</th>
+                                <th>실현손익</th>
+                                <th>상태</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mock-orders-tbody">
+                            <tr><td colspan="7" style="color: var(--text-dim); padding: 24px;">체결된 모의 주문 내역이 없습니다.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -3119,55 +3297,335 @@ ${kw.params}
             CUSTOM: { name: "사용자 직접입력", tick: 0.25, mult: 20, capital: 50000, desc: "사용자 직접입력 (아래 고급설정에서 틱/승수/자본금 변경 가능)" }
         };
 
+        // Mock Trading (Kiwoom Live Simulation) State
+        let mockTradingState = {
+            balance: 100000000.0, // 기본 1억원
+            position: 0, // 1 (Buy/매수), -1 (Sell/매도), 0 (Flat/무포지션)
+            entryPrice: 0.0,
+            entryTime: "",
+            realizedPnl: 0.0,
+            trades: []
+        };
+        try {
+            const savedMock = localStorage.getItem('kiwoom_mock_trading_state');
+            if (savedMock) {
+                mockTradingState = Object.assign(mockTradingState, JSON.parse(savedMock));
+            }
+        } catch (e) {}
+
+        function saveMockTradingState() {
+            try {
+                localStorage.setItem('kiwoom_mock_trading_state', JSON.stringify(mockTradingState));
+            } catch (e) {}
+        }
+
+        function switchMockSubTab(tab) {
+            const tabTicks = document.getElementById('tab-mock-sub-ticks');
+            const tabBars = document.getElementById('tab-mock-sub-bars');
+            const tabOrders = document.getElementById('tab-mock-sub-orders');
+            const panelTicks = document.getElementById('mock-panel-ticks');
+            const panelBars = document.getElementById('mock-panel-bars');
+            const panelOrders = document.getElementById('mock-panel-orders');
+
+            [tabTicks, tabBars, tabOrders].forEach(t => {
+                if (t) {
+                    t.classList.remove('active-mode-tab');
+                    t.style.color = 'var(--text-muted)';
+                    t.style.background = 'transparent';
+                }
+            });
+            [panelTicks, panelBars, panelOrders].forEach(p => {
+                if (p) p.style.display = 'none';
+            });
+
+            if (tab === 'TICKS') {
+                if (tabTicks) { tabTicks.classList.add('active-mode-tab'); tabTicks.style.color = '#fff'; tabTicks.style.background = ''; }
+                if (panelTicks) panelTicks.style.display = 'block';
+            } else if (tab === 'BARS') {
+                if (tabBars) { tabBars.classList.add('active-mode-tab'); tabBars.style.color = '#fff'; tabBars.style.background = ''; }
+                if (panelBars) panelBars.style.display = 'block';
+            } else if (tab === 'ORDERS') {
+                if (tabOrders) { tabOrders.classList.add('active-mode-tab'); tabOrders.style.color = '#fff'; tabOrders.style.background = ''; }
+                if (panelOrders) panelOrders.style.display = 'block';
+                renderMockOrderHistory();
+            }
+        }
+
+        function executeMockOrder(action) {
+            const curPrice = window.lastRealtimeQuotePrice || 0;
+            if (!curPrice || curPrice <= 0) {
+                showToast("현재 실시간 시세가 수신되지 않아 모의 주문을 실행할 수 없습니다.", "fa-triangle-exclamation");
+                return;
+            }
+            const nowTime = new Date().toTimeString().split(' ')[0];
+            const multiplier = 250000.0;
+            const slippageTicks = 1;
+            const tickValue = 0.05;
+
+            if (action === 'BUY') {
+                if (mockTradingState.position > 0) {
+                    showToast("이미 매수 포지션을 보유 중입니다. (1계약 한도)", "fa-circle-info");
+                    return;
+                }
+                if (mockTradingState.position < 0) {
+                    closeMockPosition(curPrice + (slippageTicks * tickValue), nowTime, "매수 스위칭");
+                }
+                const execPrice = curPrice + (slippageTicks * tickValue);
+                mockTradingState.position = 1;
+                mockTradingState.entryPrice = execPrice;
+                mockTradingState.entryTime = nowTime;
+                addMockOrderLog(nowTime, "KOSPI 200", "매수(Buy)", 1, execPrice, 0, "체결완료");
+                showToast(`[모의주문] KOSPI 200 매수 1계약 체결 @ ${execPrice.toFixed(2)}`, "fa-arrow-trend-up");
+            } else if (action === 'SELL') {
+                if (mockTradingState.position < 0) {
+                    showToast("이미 매도 포지션을 보유 중입니다. (1계약 한도)", "fa-circle-info");
+                    return;
+                }
+                if (mockTradingState.position > 0) {
+                    closeMockPosition(curPrice - (slippageTicks * tickValue), nowTime, "매도 스위칭");
+                }
+                const execPrice = curPrice - (slippageTicks * tickValue);
+                mockTradingState.position = -1;
+                mockTradingState.entryPrice = execPrice;
+                mockTradingState.entryTime = nowTime;
+                addMockOrderLog(nowTime, "KOSPI 200", "매도(Sell)", 1, execPrice, 0, "체결완료");
+                showToast(`[모의주문] KOSPI 200 매도 1계약 체결 @ ${execPrice.toFixed(2)}`, "fa-arrow-trend-down");
+            } else if (action === 'CLOSE') {
+                if (mockTradingState.position === 0) {
+                    showToast("청산할 보유 포지션이 없습니다.", "fa-circle-info");
+                    return;
+                }
+                const exitPrice = mockTradingState.position > 0 ? (curPrice - (slippageTicks * tickValue)) : (curPrice + (slippageTicks * tickValue));
+                closeMockPosition(exitPrice, nowTime, "시장가 전량 청산");
+            }
+
+            saveMockTradingState();
+            updateMockTradingUI();
+        }
+
+        function closeMockPosition(exitPrice, exitTime, reason) {
+            const multiplier = 250000.0;
+            const diff = (exitPrice - mockTradingState.entryPrice) * mockTradingState.position;
+            const pnl = Math.round(diff * multiplier);
+            mockTradingState.realizedPnl += pnl;
+            mockTradingState.balance += pnl;
+
+            const sideStr = mockTradingState.position > 0 ? "매수청산" : "매도청산";
+            addMockOrderLog(exitTime, "KOSPI 200", sideStr, 1, exitPrice, pnl, "청산완료");
+            showToast(`[포지션 청산] 손익: ${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()}원 (${diff >= 0 ? '+' : ''}${diff.toFixed(2)}pt)`, pnl >= 0 ? "fa-circle-check" : "fa-triangle-exclamation");
+
+            mockTradingState.position = 0;
+            mockTradingState.entryPrice = 0.0;
+            mockTradingState.entryTime = "";
+            saveMockTradingState();
+        }
+
+        function addMockOrderLog(time, sym, side, qty, price, pnl, status) {
+            mockTradingState.trades.unshift({
+                time: time,
+                symbol: sym,
+                side: side,
+                qty: qty,
+                price: price.toFixed(2),
+                pnl: pnl,
+                status: status
+            });
+            if (mockTradingState.trades.length > 50) mockTradingState.trades.pop();
+            renderMockOrderHistory();
+        }
+
+        function renderMockOrderHistory() {
+            const tbody = document.getElementById('mock-orders-tbody');
+            if (!tbody) return;
+            if (!mockTradingState.trades || mockTradingState.trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="color: var(--text-dim); padding: 24px;">체결된 모의 주문 내역이 없습니다.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = mockTradingState.trades.map(t => {
+                const isBuy = t.side.includes("매수");
+                const sideColor = isBuy ? "#ef4444" : "#3b82f6";
+                const pnlColor = t.pnl > 0 ? "#10b981" : (t.pnl < 0 ? "#f43f5e" : "var(--text-muted)");
+                const pnlText = t.pnl !== 0 ? `${t.pnl >= 0 ? '+' : ''}${t.pnl.toLocaleString()}원` : '-';
+                return `
+                    <tr>
+                        <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.76rem;">${t.time}</td>
+                        <td style="font-weight: 600;">${t.symbol}</td>
+                        <td style="color: ${sideColor}; font-weight: 700;">${t.side}</td>
+                        <td>${t.qty}</td>
+                        <td style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">${t.price}</td>
+                        <td style="color: ${pnlColor}; font-weight: 800; font-family: 'JetBrains Mono', monospace;">${pnlText}</td>
+                        <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.7rem;">${t.status}</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateMockTradingUI() {
+            const curPrice = window.lastRealtimeQuotePrice || 0;
+            const multiplier = 250000.0;
+            let unrealizedPnl = 0;
+            let unrealizedPct = 0;
+
+            if (mockTradingState.position !== 0 && curPrice > 0 && mockTradingState.entryPrice > 0) {
+                const diff = (curPrice - mockTradingState.entryPrice) * mockTradingState.position;
+                unrealizedPnl = Math.round(diff * multiplier);
+                unrealizedPct = ((curPrice - mockTradingState.entryPrice) / mockTradingState.entryPrice) * 100 * mockTradingState.position;
+            }
+
+            const totalBalance = mockTradingState.balance + unrealizedPnl;
+            const totalRetPct = ((totalBalance - 100000000.0) / 100000000.0) * 100;
+
+            // Update sidebar elements
+            const balEl = document.getElementById('mock-card-balance');
+            const posEl = document.getElementById('mock-card-pos');
+            const pnlEl = document.getElementById('mock-card-pnl');
+
+            if (balEl) balEl.innerText = `${Math.round(totalBalance).toLocaleString()} 원`;
+            if (posEl) {
+                if (mockTradingState.position === 1) {
+                    posEl.innerHTML = `<span style="color: #ef4444; font-weight: 800;">매수 1계약</span> @ ${mockTradingState.entryPrice.toFixed(2)}`;
+                } else if (mockTradingState.position === -1) {
+                    posEl.innerHTML = `<span style="color: #3b82f6; font-weight: 800;">매도 1계약</span> @ ${mockTradingState.entryPrice.toFixed(2)}`;
+                } else {
+                    posEl.innerText = "무포지션 (0)";
+                    posEl.style.color = "var(--text-dim)";
+                }
+            }
+            if (pnlEl) {
+                const sign = unrealizedPnl >= 0 ? '+' : '';
+                pnlEl.innerText = `${sign}${unrealizedPnl.toLocaleString()} 원 (${sign}${unrealizedPct.toFixed(2)}%)`;
+                pnlEl.style.color = unrealizedPnl >= 0 ? '#10b981' : '#f43f5e';
+            }
+
+            // Update metrics grid in mock tab
+            const mPnl = document.getElementById('mock-metric-pnl');
+            const mPnlPct = document.getElementById('mock-metric-pnl-pct');
+            if (mPnl) {
+                const totalPnl = Math.round(totalBalance - 100000000.0);
+                const s = totalPnl >= 0 ? '+' : '';
+                mPnl.innerText = `${s}${totalPnl.toLocaleString()} 원`;
+                mPnl.style.color = totalPnl >= 0 ? '#10b981' : '#f43f5e';
+            }
+            if (mPnlPct) {
+                const s = totalRetPct >= 0 ? '+' : '';
+                mPnlPct.innerText = `총 수익률: ${s}${totalRetPct.toFixed(2)}% | 미실현: ${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toLocaleString()}원`;
+            }
+        }
+
         function switchMarketMode(mode) {
             currentMarketMode = mode;
             const btnDom = document.getElementById('tab-mode-domestic');
             const btnOvs = document.getElementById('tab-mode-overseas');
+            const btnMock = document.getElementById('tab-mode-mock');
+
             const domSidebar = document.getElementById('sidebar-domestic-container');
             const ovsSidebar = document.getElementById('sidebar-overseas-container');
-            const ovsInfo = document.getElementById('overseas-quick-info');
-            const chartTitle = document.getElementById('chart-main-title');
+            const mockSidebar = document.getElementById('sidebar-mock-container');
 
-            if (mode === 'OVERSEAS') {
-                if (btnDom) {
-                    btnDom.classList.remove('active-mode-tab');
-                    btnDom.style.color = 'var(--text-muted)';
-                    btnDom.style.background = 'transparent';
+            const metricsBacktest = document.getElementById('metrics-grid-backtest');
+            const metricsMock = document.getElementById('metrics-grid-mock');
+
+            const tableRanking = document.getElementById('table-card-ranking');
+            const tableBreakdown = document.getElementById('breakdown-card');
+            const tableMock = document.getElementById('mock-trading-card');
+
+            const quickInfoText = document.getElementById('mode-quick-info-text');
+            const quickInfo = document.getElementById('mode-quick-info');
+
+            const chartTitle = document.getElementById('chart-main-title');
+            const chartBadge = document.getElementById('chart-mode-badge');
+            const chartIcon = document.getElementById('chart-title-icon');
+            const realtimeBar = document.getElementById('realtime-tick-control-bar');
+
+            // Reset tab button styles
+            [btnDom, btnOvs, btnMock].forEach(b => {
+                if (b) {
+                    b.classList.remove('active-mode-tab');
+                    b.style.color = 'var(--text-muted)';
+                    b.style.background = 'transparent';
                 }
-                if (btnOvs) {
-                    btnOvs.classList.add('active-mode-tab');
-                    btnOvs.style.color = '#fff';
-                }
+            });
+
+            if (mode === 'MOCK') {
+                if (btnMock) { btnMock.classList.add('active-mode-tab'); btnMock.style.color = '#fff'; btnMock.style.background = ''; }
+                if (domSidebar) domSidebar.style.display = 'none';
+                if (ovsSidebar) ovsSidebar.style.display = 'none';
+                if (mockSidebar) mockSidebar.style.display = 'flex';
+
+                if (metricsBacktest) metricsBacktest.style.display = 'none';
+                if (metricsMock) metricsMock.style.display = 'grid';
+
+                if (tableRanking) tableRanking.style.display = 'none';
+                if (tableBreakdown) tableBreakdown.style.display = 'none';
+                if (tableMock) tableMock.style.display = 'block';
+
+                if (quickInfoText) quickInfoText.innerText = '키움 OpenAPI 실시간 틱 수신 & N-Tick 동적 캔들 스트리밍';
+                if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = '#10b981'; }
+
+                if (chartTitle) chartTitle.innerText = '키움 국내선물 실시간 틱차트 (LIVE)';
+                if (chartBadge) { chartBadge.innerText = '🔴 LIVE 스트리밍'; chartBadge.className = 'badge badge-rose'; }
+                if (chartIcon) { chartIcon.className = 'fa-solid fa-tower-broadcast'; chartIcon.style.color = '#10b981'; }
+                if (realtimeBar) realtimeBar.style.display = 'flex';
+
+                startRealtimePolling();
+                fetchRealtimeBars(true);
+                updateMockTradingUI();
+                renderMockOrderHistory();
+                showToast("실시간 모의매매 (Kiwoom Live) 모드로 전환되었습니다.", "fa-tower-broadcast");
+            } else if (mode === 'OVERSEAS') {
+                if (btnOvs) { btnOvs.classList.add('active-mode-tab'); btnOvs.style.color = '#fff'; btnOvs.style.background = ''; }
                 if (domSidebar) domSidebar.style.display = 'none';
                 if (ovsSidebar) ovsSidebar.style.display = 'flex';
-                if (ovsInfo) ovsInfo.style.display = 'flex';
-                if (chartTitle) chartTitle.innerText = '키움 영웅문 Global 해외선물 CDT 캔들 차트';
+                if (mockSidebar) mockSidebar.style.display = 'none';
 
+                if (metricsBacktest) metricsBacktest.style.display = 'grid';
+                if (metricsMock) metricsMock.style.display = 'none';
+
+                if (tableRanking) tableRanking.style.display = 'block';
+                if (tableBreakdown) tableBreakdown.style.display = (breakdownData && breakdownData.length > 0) ? 'block' : 'none';
+                if (tableMock) tableMock.style.display = 'none';
+
+                if (quickInfoText) quickInfoText.innerText = 'CDT 캔들 바이너리 고속 파싱 & 중복제거 모드';
+                if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = '#f59e0b'; }
+
+                if (chartTitle) chartTitle.innerText = '키움 영웅문 Global 해외선물 CDT 캔들 차트';
+                if (chartBadge) { chartBadge.innerText = '해외선물 분석'; chartBadge.className = 'badge badge-emerald'; }
+                if (chartIcon) { chartIcon.className = 'fa-solid fa-chart-candlestick'; chartIcon.style.color = 'var(--accent-cyan)'; }
+                if (realtimeBar) realtimeBar.style.display = 'none';
+
+                stopRealtimePolling();
                 const capIn = document.getElementById('os-init-capital');
                 if (capIn && (parseFloat(capIn.value) >= 1000000 || !capIn.value)) {
                     capIn.value = 50000;
                 }
-
                 populateOverseasStrategies();
                 fetchOverseasStatus();
                 showToast("해외선물(Global Futures CDT) 모드로 전환되었습니다.", "fa-globe");
             } else {
-                if (btnOvs) {
-                    btnOvs.classList.remove('active-mode-tab');
-                    btnOvs.style.color = 'var(--text-muted)';
-                    btnOvs.style.background = 'transparent';
-                }
-                if (btnDom) {
-                    btnDom.classList.add('active-mode-tab');
-                    btnDom.style.color = '#fff';
-                }
-                if (ovsSidebar) ovsSidebar.style.display = 'none';
+                // DOMESTIC
+                if (btnDom) { btnDom.classList.add('active-mode-tab'); btnDom.style.color = '#fff'; btnDom.style.background = ''; }
                 if (domSidebar) domSidebar.style.display = 'flex';
-                if (ovsInfo) ovsInfo.style.display = 'none';
-                if (chartTitle) chartTitle.innerText = '키움 스타일 국내선물 틱봉 차트';
+                if (ovsSidebar) ovsSidebar.style.display = 'none';
+                if (mockSidebar) mockSidebar.style.display = 'none';
 
-                showToast("국내선물(KOSPI 200) 모드로 전환되었습니다.", "fa-won-sign");
+                if (metricsBacktest) metricsBacktest.style.display = 'grid';
+                if (metricsMock) metricsMock.style.display = 'none';
+
+                if (tableRanking) tableRanking.style.display = 'block';
+                if (tableBreakdown) tableBreakdown.style.display = (breakdownData && breakdownData.length > 0) ? 'block' : 'none';
+                if (tableMock) tableMock.style.display = 'none';
+
+                if (quickInfoText) quickInfoText.innerText = 'DuckDB 고속 벡터 백테스트 & 30개 지표 분석 모드';
+                if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = 'var(--accent-cyan)'; }
+
+                if (chartTitle) chartTitle.innerText = '키움 스타일 국내선물 틱봉 차트';
+                if (chartBadge) { chartBadge.innerText = '국내선물 백테스트'; chartBadge.className = 'badge badge-emerald'; }
+                if (chartIcon) { chartIcon.className = 'fa-solid fa-chart-candlestick'; chartIcon.style.color = 'var(--accent-cyan)'; }
+                if (realtimeBar) realtimeBar.style.display = 'none';
+
+                stopRealtimePolling();
                 previewChart();
+                showToast("국내선물(KOSPI 200 CSV) 모드로 전환되었습니다.", "fa-won-sign");
             }
         }
 
@@ -5603,7 +6061,7 @@ ${kw.params}
                 const data = await res.json();
                 updateKiwoomStatusUI(data);
                 showToast(`키움증권 [${currentKiwoomServer === 'real' ? '실거래' : '모의투자'}] 서버 연결 성공!`, "fa-server");
-                switchChartFeedMode('REALTIME');
+                switchMarketMode('MOCK');
             } catch (err) {
                 console.error("connectKiwoom error:", err);
                 showToast("키움증권 서버 연결 실패: " + err.message, "fa-triangle-exclamation");
@@ -5645,7 +6103,7 @@ ${kw.params}
                 updateKiwoomStatusUI(data);
                 showToast("키움 서버 연결 및 설정 저장이 완료되었습니다.", "fa-check");
                 closeKiwoomModal();
-                switchChartFeedMode('REALTIME');
+                switchMarketMode('MOCK');
             } catch (err) {
                 showToast("연결 실패: " + err.message, "fa-triangle-exclamation");
             } finally {
@@ -5810,8 +6268,14 @@ ${kw.params}
             }
         }
 
+        function setRealtimeSpeed(spd) {
+            const selectEl = document.getElementById('rt-speed-select');
+            if (selectEl) selectEl.value = parseFloat(spd).toFixed(1);
+            changeRealtimeSpeed(spd);
+        }
+
         function refreshActiveChart() {
-            if (currentChartFeedMode === 'REALTIME') {
+            if (currentMarketMode === 'MOCK' || currentChartFeedMode === 'REALTIME') {
                 fetchRealtimeBars(true);
             } else {
                 if (currentMarketMode === 'OVERSEAS') previewOverseasChart();
@@ -5822,7 +6286,7 @@ ${kw.params}
         function startRealtimePolling() {
             stopRealtimePolling();
             realtimeTickTimer = setInterval(() => {
-                if (currentChartFeedMode === 'REALTIME' && !isRealtimePaused) {
+                if ((currentMarketMode === 'MOCK' || currentChartFeedMode === 'REALTIME') && !isRealtimePaused) {
                     fetchRealtimeBars(false);
                 }
             }, 1000);
@@ -5841,7 +6305,7 @@ ${kw.params}
                 const data = await res.json();
                 if (!data || data.status !== 'success') return;
 
-                // 1. Update Real-Time Ticker Bar
+                // 1. Update Real-Time Ticker Bar & Quotes
                 const quote = data.latest_quote || {};
                 const pEl = document.getElementById('rt-current-price');
                 const chgEl = document.getElementById('rt-price-change');
@@ -5855,6 +6319,7 @@ ${kw.params}
                 const curPrice = quote.price || 0.0;
                 const change = quote.change || 0.0;
                 const changeRate = quote.change_rate || 0.0;
+                window.lastRealtimeQuotePrice = curPrice;
 
                 if (pEl) {
                     pEl.innerText = curPrice.toFixed(2);
@@ -5866,10 +6331,13 @@ ${kw.params}
                     lastRealtimePrice = curPrice;
                 }
 
+                const arrow = (change >= 0) ? '▲ +' : '▼ ';
+                const chgText = `${arrow}${Math.abs(change).toFixed(2)} (${changeRate >= 0 ? '+' : ''}${changeRate.toFixed(2)}%)`;
+                const chgColor = (change >= 0) ? '#ef4444' : '#3b82f6';
+
                 if (chgEl) {
-                    const arrow = (change >= 0) ? '▲ +' : '▼ ';
-                    chgEl.innerText = `${arrow}${Math.abs(change).toFixed(2)} (${changeRate >= 0 ? '+' : ''}${changeRate.toFixed(2)}%)`;
-                    chgEl.style.color = (change >= 0) ? '#ef4444' : '#3b82f6';
+                    chgEl.innerText = chgText;
+                    chgEl.style.color = chgColor;
                 }
 
                 if (cVolEl) cVolEl.innerText = (quote.volume || 0).toLocaleString();
@@ -5882,7 +6350,77 @@ ${kw.params}
                     tagEl.innerText = `[실시간 ${data.symbol}] ${data.tick_size}틱봉 | ${curPrice.toFixed(2)} (${data.candles.closes.length}개 봉)`;
                 }
 
-                // 2. Render to Plotly Chart
+                // 2. Sync Dedicated Mock Trading Metrics Row
+                const mPrice = document.getElementById('mock-metric-price');
+                const mChange = document.getElementById('mock-metric-change');
+                const mTps = document.getElementById('mock-metric-tps');
+                const mTotalTicks = document.getElementById('mock-metric-total-ticks');
+                const mFormingPct = document.getElementById('mock-metric-forming-pct');
+                const mFormingDetail = document.getElementById('mock-metric-forming-detail');
+
+                if (mPrice) {
+                    mPrice.innerText = curPrice.toFixed(2);
+                    mPrice.style.color = chgColor;
+                }
+                if (mChange) {
+                    mChange.innerText = `전일대비: ${chgText}`;
+                    mChange.style.color = chgColor;
+                }
+                if (mTps) mTps.innerText = `${quote.tps || 0.0} TPS`;
+                if (mTotalTicks) mTotalTicks.innerText = `누적 수신: ${(quote.tick_count || 0).toLocaleString()} 틱`;
+                if (mFormingPct) mFormingPct.innerText = `${quote.forming_pct || 0}%`;
+                if (mFormingDetail) mFormingDetail.innerText = `${quote.forming_count || 0} / ${data.tick_size} 틱 진행 중`;
+
+                // 3. Update Mock Trading Account PnL & Positions
+                updateMockTradingUI();
+
+                // 4. Update Mock Sub-Panels: Live Ticks Table
+                if (data.recent_ticks && data.recent_ticks.length > 0) {
+                    const ticksTbody = document.getElementById('mock-ticks-tbody');
+                    if (ticksTbody) {
+                        ticksTbody.innerHTML = data.recent_ticks.map((t, idx) => {
+                            const isUp = t.price >= (idx < data.recent_ticks.length - 1 ? data.recent_ticks[idx + 1].price : t.price);
+                            const tColor = isUp ? '#ef4444' : '#3b82f6';
+                            const sideLabel = isUp ? '매수체결' : '매도체결';
+                            const sideBadge = isUp ? 'badge-rose' : 'badge-emerald';
+                            return `
+                                <tr>
+                                    <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.76rem;">${t.time}</td>
+                                    <td style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: ${tColor};">${t.price.toFixed(2)}</td>
+                                    <td style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">${t.volume.toLocaleString()}</td>
+                                    <td style="color: ${chgColor}; font-size: 0.75rem;">${t.price >= curPrice ? '+' : ''}${(t.price - curPrice).toFixed(2)}</td>
+                                    <td><span class="badge ${sideBadge}" style="font-size: 0.68rem;">${sideLabel}</span></td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+
+                // 5. Update Mock Sub-Panels: Completed Bars Table
+                if (data.recent_bars && data.recent_bars.length > 0) {
+                    const barsTbody = document.getElementById('mock-bars-tbody');
+                    if (barsTbody) {
+                        const revBars = [...data.recent_bars].reverse();
+                        barsTbody.innerHTML = revBars.map(b => {
+                            const isBarUp = b.close >= b.open;
+                            const barColor = isBarUp ? '#ef4444' : '#3b82f6';
+                            return `
+                                <tr>
+                                    <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem;">${b.timestamp}</td>
+                                    <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-dim);">${b.close_time || '-'}</td>
+                                    <td style="font-family: 'JetBrains Mono', monospace;">${b.open.toFixed(2)}</td>
+                                    <td style="font-family: 'JetBrains Mono', monospace; color: #ef4444;">${b.high.toFixed(2)}</td>
+                                    <td style="font-family: 'JetBrains Mono', monospace; color: #3b82f6;">${b.low.toFixed(2)}</td>
+                                    <td style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: ${barColor};">${b.close.toFixed(2)}</td>
+                                    <td style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">${(b.volume || 0).toLocaleString()}</td>
+                                    <td><span class="badge" style="background: rgba(0,242,254,0.15); color: var(--accent-cyan); font-size: 0.68rem;">${data.tick_size}T</span></td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+
+                // 6. Render to Plotly Chart
                 renderPlotlyChart({
                     timestamps: data.candles.timestamps,
                     open: data.candles.opens,
