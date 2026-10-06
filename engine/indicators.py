@@ -8,6 +8,16 @@ import pandas as pd
 import numpy as np
 
 
+def _calc_true_range(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
+    """Vectorized high-speed True Range calculation without DataFrame concat overhead."""
+    tr1 = high - low
+    prev_close = np.roll(close, 1)
+    prev_close[0] = close[0]
+    tr2 = np.abs(high - prev_close)
+    tr3 = np.abs(low - prev_close)
+    return np.maximum(tr1, np.maximum(tr2, tr3))
+
+
 class TrendIndicators:
     """Category A: Top 10 Trend Indicators"""
 
@@ -102,11 +112,7 @@ class TrendIndicators:
         plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
         minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
         
-        tr1 = high - low
-        tr2 = (high - close.shift(1)).abs()
-        tr3 = (low - close.shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        
+        tr = pd.Series(_calc_true_range(high.values, low.values, close.values), index=df.index)
         atr = tr.ewm(alpha=1/period, adjust=False).mean()
         plus_di = 100 * (pd.Series(plus_dm, index=df.index).ewm(alpha=1/period, adjust=False).mean() / atr)
         minus_di = 100 * (pd.Series(minus_dm, index=df.index).ewm(alpha=1/period, adjust=False).mean() / atr)
@@ -199,10 +205,7 @@ class TrendIndicators:
         out = pd.DataFrame(index=df.index)
         out['kc_mid'] = df['close'].ewm(span=ema_period, adjust=False).mean()
         
-        tr1 = df['high'] - df['low']
-        tr2 = (df['high'] - df['close'].shift(1)).abs()
-        tr3 = (df['low'] - df['close'].shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        tr = pd.Series(_calc_true_range(df['high'].values, df['low'].values, df['close'].values), index=df.index)
         atr = tr.ewm(span=atr_period, adjust=False).mean()
         
         out['kc_upper'] = out['kc_mid'] + multiplier * atr
@@ -260,7 +263,17 @@ class MomentumIndicators:
         out = pd.DataFrame(index=df.index)
         tp = (df['high'] + df['low'] + df['close']) / 3
         sma_tp = tp.rolling(period).mean()
-        mad = tp.rolling(period).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True).replace(0, np.nan)
+        tp_vals = tp.values
+        n_tp = len(tp_vals)
+        if n_tp >= period:
+            windows = np.lib.stride_tricks.sliding_window_view(tp_vals, window_shape=period)
+            means = np.mean(windows, axis=1, keepdims=True)
+            mads = np.mean(np.abs(windows - means), axis=1)
+            mad_arr = np.full(n_tp, np.nan)
+            mad_arr[period - 1:] = mads
+            mad = pd.Series(mad_arr, index=df.index).replace(0, np.nan)
+        else:
+            mad = pd.Series(np.nan, index=df.index)
         out['cci'] = (tp - sma_tp) / (0.015 * mad)
         return out
 
@@ -379,11 +392,7 @@ class VolatilityIndicators:
     def atr_breakout(df: pd.DataFrame, period: int = 14, multiplier: float = 2.0) -> pd.DataFrame:
         """2. ATR Breakout Bands"""
         out = pd.DataFrame(index=df.index)
-        tr1 = df['high'] - df['low']
-        tr2 = (df['high'] - df['close'].shift(1)).abs()
-        tr3 = (df['low'] - df['close'].shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        
+        tr = pd.Series(_calc_true_range(df['high'].values, df['low'].values, df['close'].values), index=df.index)
         out['atr'] = tr.ewm(alpha=1/period, adjust=False).mean()
         sma = df['close'].rolling(period).mean()
         out['atr_upper'] = sma + (multiplier * out['atr'])
@@ -401,13 +410,24 @@ class VolatilityIndicators:
         # Squeeze condition: Bollinger bands inside Keltner channel
         out['squeeze_on'] = (bb['bb_lower'] > kc['kc_lower']) & (bb['bb_upper'] < kc['kc_upper'])
         
-        # Squeeze Momentum (Linear regression of close vs SMA)
+        # Squeeze Momentum (Linear regression of close vs SMA) - High-speed vectorized 1D convolution
         mid_line = (kc['kc_upper'] + kc['kc_lower']) / 2
         delta = df['close'] - mid_line
-        out['squeeze_mom'] = delta.rolling(bb_period).apply(
-            lambda x: np.polyfit(np.arange(len(x)), x, 1)[0] * (len(x)-1) + np.polyfit(np.arange(len(x)), x, 1)[1] if len(x)==bb_period else 0,
-            raw=True
-        )
+        delta_vals = delta.values
+        n_delta = len(delta_vals)
+        if n_delta >= bb_period:
+            x = np.arange(bb_period)
+            x_mean = (bb_period - 1) / 2.0
+            x_dev = x - x_mean
+            weights = x_dev / np.sum(x_dev ** 2)
+            slope_valid = np.convolve(delta_vals, weights[::-1], mode='valid')
+            slope = np.full(n_delta, np.nan)
+            slope[bb_period - 1:] = slope_valid
+            y_mean = delta.rolling(bb_period).mean().values
+            mom_vals = y_mean + slope * x_mean
+            out['squeeze_mom'] = pd.Series(mom_vals, index=df.index).fillna(0)
+        else:
+            out['squeeze_mom'] = 0.0
         return out
 
     @staticmethod
@@ -453,11 +473,7 @@ class VolatilityIndicators:
     def choppiness_index(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
         """8. Choppiness Index (0-100: <38.2 Trending, >61.8 Choppy/Consolidation)"""
         out = pd.DataFrame(index=df.index)
-        tr1 = df['high'] - df['low']
-        tr2 = (df['high'] - df['close'].shift(1)).abs()
-        tr3 = (df['low'] - df['close'].shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        
+        tr = pd.Series(_calc_true_range(df['high'].values, df['low'].values, df['close'].values), index=df.index)
         sum_tr = tr.rolling(period).sum()
         max_hi = df['high'].rolling(period).max()
         min_lo = df['low'].rolling(period).min()

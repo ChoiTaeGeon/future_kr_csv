@@ -86,22 +86,21 @@ class Resampler:
 
         df = df.sort_values('timestamp').reset_index(drop=True)
         
-        # 1. Intraday Daily Session Grouping (일별 누적 틱 주기 리셋)
+        # 1. Intraday Daily Session Grouping (High-speed integer key without string formatting)
         ts_series = pd.to_datetime(df['timestamp'])
-        trade_dates = ts_series.dt.strftime('%Y-%m-%d')
-        df['_trade_date'] = trade_dates
+        date_int = ts_series.dt.year * 10000 + ts_series.dt.month * 100 + ts_series.dt.day
         
-        # Calculate group IDs per trading day
-        daily_tick_idx = df.groupby('_trade_date').cumcount() // tick_size
-        df['_bar_id'] = trade_dates + '_' + daily_tick_idx.astype(str)
+        # Calculate group IDs per trading day using fast integer array operations
+        daily_tick_idx = df.groupby(date_int).cumcount() // tick_size
+        df['_bar_id'] = date_int.values * 1_000_000 + daily_tick_idx.values
         
         # Calculate typical price * volume for VWAP
         df['_pv'] = df['price'] * df['volume']
 
-        # Aggregation
+        # Aggregation (Single-pass includes count to eliminate secondary groupby)
         agg_dict = {
             'timestamp': ['first', 'last'],
-            'price': ['first', 'max', 'min', 'last'],
+            'price': ['first', 'max', 'min', 'last', 'count'],
             'volume': 'sum',
             '_pv': 'sum'
         }
@@ -123,7 +122,7 @@ class Resampler:
         bars['low'] = grouped['price']['min']
         bars['close'] = grouped['price']['last']
         bars['volume'] = grouped['volume']['sum']
-        bars['tick_count'] = df.groupby('_bar_id', sort=False).size().values
+        bars['tick_count'] = grouped['price']['count'].values
         
         # Compute VWAP
         vol_sum = bars['volume'].replace(0, np.nan)
@@ -136,7 +135,7 @@ class Resampler:
             bars['ask'] = grouped['ask']['last']
 
         # Clean temporary columns
-        df.drop(columns=['_trade_date', '_bar_id', '_pv'], inplace=True, errors='ignore')
+        df.drop(columns=['_bar_id', '_pv'], inplace=True, errors='ignore')
         
         bars.sort_values('open_time', inplace=True)
         bars.reset_index(drop=True, inplace=True)

@@ -16,6 +16,15 @@ from urllib.parse import urlparse, parse_qs
 import threading
 from typing import Any, Tuple, Optional, List, Dict
 
+try:
+    import orjson
+
+    def _fast_json_dumps(obj: Any) -> bytes:
+        return orjson.dumps(obj, option=orjson.OPT_NON_STR_KEYS)
+except ImportError:
+    def _fast_json_dumps(obj: Any) -> bytes:
+        return json.dumps(obj, ensure_ascii=False).encode('utf-8')
+
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -88,10 +97,10 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
     def _send_json_response(self, data_obj: Any, status: int = 200):
         """High-efficiency JSON response with transparent gzip compression (>1KB payloads)."""
         try:
-            body_bytes = json.dumps(data_obj, ensure_ascii=False).encode('utf-8')
+            body_bytes = _fast_json_dumps(data_obj)
             accept_enc = self.headers.get('Accept-Encoding', '') if hasattr(self, 'headers') and self.headers else ''
             if 'gzip' in accept_enc and len(body_bytes) > 1024:
-                compressed = gzip.compress(body_bytes, compresslevel=5)
+                compressed = gzip.compress(body_bytes, compresslevel=4)
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.send_header('Content-Encoding', 'gzip')

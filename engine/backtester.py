@@ -151,6 +151,16 @@ class Backtester:
             'month': ts_series.dt.strftime("%Y-%m")
         })
 
+        # Pre-group trades by year and month to avoid repeated O(N) string filtering in loops
+        trades_by_year = {}
+        trades_by_month = {}
+        if not trades.empty and 'entry_time' in trades.columns:
+            entry_str = trades['entry_time'].astype(str)
+            for y_val, idxs in trades.groupby(entry_str.str.slice(0, 4)).groups.items():
+                trades_by_year[y_val] = trades.loc[idxs]
+            for m_val, idxs in trades.groupby(entry_str.str.slice(0, 7)).groups.items():
+                trades_by_month[m_val] = trades.loc[idxs]
+
         # Yearly & Monthly Breakdown
         yearly_rows = []
         for yr, g in equity_df.groupby('year'):
@@ -158,7 +168,7 @@ class Backtester:
             yr_ret = (yr_pnl / self.config.initial_capital) * 100.0
             yr_pk = g['equity'].cummax()
             yr_dd = abs(((g['equity'] - yr_pk) / yr_pk).min() * 100.0) if not g.empty else 0.0
-            yr_trades = trades[trades['entry_time'].astype(str).str.startswith(yr)] if not trades.empty else pd.DataFrame()
+            yr_trades = trades_by_year.get(yr, pd.DataFrame())
             yt_cnt = len(yr_trades)
             yw_cnt = len(yr_trades[yr_trades['pnl'] > 0]) if yt_cnt > 0 else 0
             yearly_rows.append({
@@ -177,7 +187,7 @@ class Backtester:
             mo_ret = (mo_pnl / self.config.initial_capital) * 100.0
             mo_pk = g['equity'].cummax()
             mo_dd = abs(((g['equity'] - mo_pk) / mo_pk).min() * 100.0) if not g.empty else 0.0
-            mo_trades = trades[trades['entry_time'].astype(str).str.startswith(mo)] if not trades.empty else pd.DataFrame()
+            mo_trades = trades_by_month.get(mo, pd.DataFrame())
             mt_cnt = len(mo_trades)
             mw_cnt = len(mo_trades[mo_trades['pnl'] > 0]) if mt_cnt > 0 else 0
             monthly_rows.append({

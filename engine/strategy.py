@@ -21,6 +21,13 @@ class StrategyCategory(Enum):
 
 class SignalGenerator:
     """Generates directional trading signals from calculated indicators."""
+    _CANONICAL_MAP: Optional[Dict[str, str]] = None
+
+    @classmethod
+    def _get_canonical_map(cls) -> Dict[str, str]:
+        if cls._CANONICAL_MAP is None:
+            cls._CANONICAL_MAP = {name.lower(): name for name in cls.get_indicator_list(StrategyCategory.ALL)}
+        return cls._CANONICAL_MAP
 
     @staticmethod
     def _run_contrarian_loop(df: pd.DataFrame, entry_short: np.ndarray, entry_long: np.ndarray, max_hold: int = 5) -> np.ndarray:
@@ -58,7 +65,7 @@ class SignalGenerator:
     @staticmethod
     def generate_single_signal(df: pd.DataFrame, indicator_name: str, tick_size: int = 10000) -> pd.Series:
         """Generate signal for a specific indicator."""
-        canonical_map = {name.lower(): name for name in SignalGenerator.get_indicator_list(StrategyCategory.ALL)}
+        canonical_map = SignalGenerator._get_canonical_map()
         indicator_name = canonical_map.get(str(indicator_name).strip().lower(), indicator_name)
 
         signal = pd.Series(0, index=df.index, dtype=int)
