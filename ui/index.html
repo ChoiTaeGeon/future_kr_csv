@@ -4310,8 +4310,11 @@ ${kw.params}
         async function browseFolder() {
             showToast("폴더 탐색기 여는 중...", "fa-folder-open");
             setChartLoader(true, "폴더 탐색기 대기 중... 대상 폴더를 선택하세요.");
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
             try {
-                const res = await fetch('/api/browse-folder', { method: 'POST' });
+                const res = await fetch('/api/browse-folder', { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (data.status === 'success' && data.folder) {
                     document.getElementById('csv-folder').value = data.folder;
@@ -4323,7 +4326,12 @@ ${kw.params}
                     showToast("폴더 선택이 취소되었습니다.", "fa-info");
                 }
             } catch (e) {
-                showToast("폴더 탐색기 에러", "fa-triangle-exclamation");
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    showToast("폴더 탐색기 응답 시간이 초과되었습니다.", "fa-triangle-exclamation");
+                } else {
+                    showToast("폴더 탐색기 에러", "fa-triangle-exclamation");
+                }
             } finally {
                 setChartLoader(false);
             }
@@ -4332,8 +4340,11 @@ ${kw.params}
         async function browseFiles() {
             showToast("파일 탐색기 여는 중 (단일/복수 CSV 선택)...", "fa-file-csv");
             setChartLoader(true, "파일 탐색기 대기 중... 대상 CSV 파일(들)을 선택하세요.");
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
             try {
-                const res = await fetch('/api/browse-files', { method: 'POST' });
+                const res = await fetch('/api/browse-files', { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (data.status === 'success' && data.files_str) {
                     document.getElementById('csv-folder').value = data.files_str;
@@ -4345,7 +4356,12 @@ ${kw.params}
                     showToast("파일 선택이 취소되었습니다.", "fa-info");
                 }
             } catch (e) {
-                showToast("파일 탐색기 에러", "fa-triangle-exclamation");
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    showToast("파일 탐색기 응답 시간이 초과되었습니다.", "fa-triangle-exclamation");
+                } else {
+                    showToast("파일 탐색기 에러", "fa-triangle-exclamation");
+                }
             } finally {
                 setChartLoader(false);
             }
@@ -6655,13 +6671,16 @@ ${kw.params}
         async function browseDlFolder() {
             const btn = document.getElementById('dl-btn-browse-folder');
             const origHtml = btn ? btn.innerHTML : '';
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
             try {
                 if (btn) {
                     btn.disabled = true;
                     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 탐색기 열림...';
                 }
                 showToast("윈도우 폴더 탐색기 창이 열렸습니다. 폴더를 선택하세요.", "fa-folder-open");
-                const res = await fetch('/api/dl/browse-folder', { method: 'POST' });
+                const res = await fetch('/api/dl/browse-folder', { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (data.status === 'success' && data.folder) {
                     const folderInput = document.getElementById('dl-csv-folder');
@@ -6674,7 +6693,12 @@ ${kw.params}
                     showToast("폴더 선택이 취소되었습니다.", "fa-xmark");
                 }
             } catch (e) {
-                showToast("폴더 탐색 오류: " + e, "fa-triangle-exclamation");
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    showToast("폴더 탐색기 응답 시간이 초과되었습니다.", "fa-triangle-exclamation");
+                } else {
+                    showToast("폴더 탐색 오류: " + e, "fa-triangle-exclamation");
+                }
             } finally {
                 if (btn && origHtml) {
                     btn.disabled = false;

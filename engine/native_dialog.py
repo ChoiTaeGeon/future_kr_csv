@@ -13,19 +13,50 @@ from typing import Optional, List
 from engine.logger import log_error, log_info
 
 
-def select_folder(title: str = "폴더를 선택하세요", initial_dir: str = "") -> Optional[str]:
+def _run_in_isolated_process(mode: str, title: str, initial_dir: str, filter_str: str = ""):
     """
-    Open native Windows folder selection dialog in foreground.
-    Returns the absolute path of selected directory, or None if cancelled.
+    Launch native dialog in a completely isolated main thread subprocess.
+    This guarantees:
+    1. Tkinter/Win32 COM runs on STA MainThread without blocking server threads.
+    2. Guaranteed TopMost foreground elevation.
+    3. Handles base64 encoded JSON communication to preserve UTF-8 paths flawlessly.
     """
-    # Engine 1: Tkinter with TopMost parent
+    import base64
+    import json
+    payload = {
+        "mode": mode,
+        "title": title,
+        "initial_dir": initial_dir or "",
+        "filter_str": filter_str or ""
+    }
+    encoded_arg = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+
+    try:
+        # Use sys.executable to run module in a separate process
+        cmd = [sys.executable, "-m", "engine.native_dialog", encoded_arg]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        for line in proc.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("DIALOG_RES_B64:"):
+                b64_res = line.split(":", 1)[1].strip()
+                if b64_res:
+                    decoded = base64.b64decode(b64_res.encode("ascii")).decode("utf-8")
+                    return json.loads(decoded)
+                return None
+    except Exception as e:
+        log_error(f"Isolated dialog subprocess error: {e}")
+    return None
+
+
+def _show_tkinter_folder(title: str, initial_dir: str) -> Optional[str]:
+    """Execute Tkinter folder dialog on the main thread of current process."""
     try:
         import tkinter as tk
         from tkinter import filedialog
 
         root = tk.Tk()
         root.withdraw()
-        root.wm_attributes('-topmost', 1)
+        root.attributes("-topmost", True)
         root.lift()
         root.focus_force()
 
@@ -35,24 +66,23 @@ def select_folder(title: str = "폴더를 선택하세요", initial_dir: str = "
 
         if path:
             norm = os.path.normpath(path)
-            if os.path.isdir(norm):
-                log_info(f"Native folder dialog selected (Tkinter): {norm}")
-                return norm
-            return norm
-        else:
-            return None
+            return norm if os.path.isdir(norm) else None
+        return None
     except Exception as tk_err:
-        log_error(f"Tkinter folder dialog failed, trying PowerShell: {tk_err}")
+        log_error(f"Tkinter folder dialog failed: {tk_err}")
+        return None
 
-    # Engine 2: PowerShell STA with TopMost dummy owner
+
+def _show_powershell_folder(title: str, initial_dir: str) -> Optional[str]:
+    """Execute PowerShell FolderBrowserDialog with TopMost owner."""
     try:
+        escaped_title = title.replace('"', '`"')
         escaped_init = initial_dir.replace('\\', '\\\\') if initial_dir else ""
         ps_script = f"""
 Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-$dialog.Description = "{title}"
+$dialog.Description = "{escaped_title}"
 $dialog.ShowNewFolderButton = $true
-$dialog.AutoUpgradeEnabled = $true
 $init = "{escaped_init}"
 if ($init -and (Test-Path $init)) {{
     $dialog.SelectedPath = $init
@@ -84,8 +114,7 @@ if ($res -eq [System.Windows.Forms.DialogResult]::OK) {{
             cmd = ["powershell", "-Sta", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
             out = subprocess.check_output(cmd, timeout=120).decode("utf-8", errors="replace").strip()
             if out and os.path.isdir(out):
-                log_info(f"Native folder dialog selected (PowerShell): {out}")
-                return out
+                return os.path.normpath(out)
         finally:
             if os.path.exists(script_path):
                 os.remove(script_path)
@@ -95,19 +124,43 @@ if ($res -eq [System.Windows.Forms.DialogResult]::OK) {{
     return None
 
 
-def select_files(title: str = "파일을 선택하세요", initial_dir: str = "", filter_str: str = "CSV / CDT Files (*.csv;*.cdt)|*.csv;*.cdt|All Files (*.*)|*.*") -> List[str]:
+def select_folder(title: str = "폴더를 선택하세요", initial_dir: str = "") -> Optional[str]:
     """
-    Open native Windows file selection dialog with multiselect support in foreground.
-    Returns list of selected absolute file paths, or empty list if cancelled.
+    Open native Windows folder selection dialog in foreground.
+    Spawns an isolated subprocess to prevent thread message deadlock.
     """
-    # Engine 1: Tkinter with TopMost parent
+    # 1. Try isolated process execution (Tkinter -> PowerShell fallback inside)
+    res = _run_in_isolated_process(mode="folder", title=title, initial_dir=initial_dir)
+    if res is not None:
+        if isinstance(res, str) and res:
+            log_info(f"Native folder dialog selected (isolated): {res}")
+            return res
+        return None
+
+    # 2. In-process Tkinter direct fallback
+    tk_res = _show_tkinter_folder(title=title, initial_dir=initial_dir)
+    if tk_res:
+        log_info(f"Native folder dialog selected (Tkinter direct): {tk_res}")
+        return tk_res
+
+    # 3. In-process PowerShell direct fallback
+    ps_res = _show_powershell_folder(title=title, initial_dir=initial_dir)
+    if ps_res:
+        log_info(f"Native folder dialog selected (PowerShell direct): {ps_res}")
+        return ps_res
+
+    return None
+
+
+def _show_tkinter_files(title: str, initial_dir: str) -> List[str]:
+    """Execute Tkinter file open dialog on main thread."""
     try:
         import tkinter as tk
         from tkinter import filedialog
 
         root = tk.Tk()
         root.withdraw()
-        root.wm_attributes('-topmost', 1)
+        root.attributes("-topmost", True)
         root.lift()
         root.focus_force()
 
@@ -125,21 +178,22 @@ def select_files(title: str = "파일을 선택하세요", initial_dir: str = ""
         root.destroy()
 
         if paths:
-            res = [os.path.normpath(p) for p in paths if os.path.exists(p)]
-            log_info(f"Native files dialog selected {len(res)} files (Tkinter)")
-            return res
-        else:
-            return []
+            return [os.path.normpath(p) for p in paths if os.path.exists(p)]
+        return []
     except Exception as tk_err:
-        log_error(f"Tkinter files dialog failed, trying PowerShell: {tk_err}")
+        log_error(f"Tkinter files dialog failed: {tk_err}")
+        return []
 
-    # Engine 2: PowerShell STA with TopMost dummy owner
+
+def _show_powershell_files(title: str, initial_dir: str, filter_str: str) -> List[str]:
+    """Execute PowerShell OpenFileDialog with TopMost owner."""
     try:
+        escaped_title = title.replace('"', '`"')
         escaped_init = initial_dir.replace('\\', '\\\\') if initial_dir else ""
         ps_script = f"""
 Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.OpenFileDialog
-$dialog.Title = "{title}"
+$dialog.Title = "{escaped_title}"
 $dialog.Multiselect = $true
 $dialog.Filter = "{filter_str}"
 $init = "{escaped_init}"
@@ -173,9 +227,7 @@ if ($res -eq [System.Windows.Forms.DialogResult]::OK) {{
             cmd = ["powershell", "-Sta", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
             out = subprocess.check_output(cmd, timeout=120).decode("utf-8", errors="replace").strip()
             if out:
-                file_list = [os.path.normpath(f.strip()) for f in out.split(";") if f.strip() and os.path.exists(f.strip())]
-                log_info(f"Native files dialog selected {len(file_list)} files (PowerShell)")
-                return file_list
+                return [os.path.normpath(f.strip()) for f in out.split(";") if f.strip() and os.path.exists(f.strip())]
         finally:
             if os.path.exists(script_path):
                 os.remove(script_path)
@@ -185,9 +237,67 @@ if ($res -eq [System.Windows.Forms.DialogResult]::OK) {{
     return []
 
 
+def select_files(title: str = "파일을 선택하세요", initial_dir: str = "", filter_str: str = "CSV / CDT Files (*.csv;*.cdt)|*.csv;*.cdt|All Files (*.*)|*.*") -> List[str]:
+    """
+    Open native Windows file selection dialog with multiselect support in foreground.
+    Spawns an isolated subprocess to prevent thread message deadlock.
+    """
+    res = _run_in_isolated_process(mode="files", title=title, initial_dir=initial_dir, filter_str=filter_str)
+    if res is not None:
+        if isinstance(res, list):
+            log_info(f"Native files dialog selected {len(res)} files (isolated)")
+            return res
+        return []
+
+    tk_res = _show_tkinter_files(title=title, initial_dir=initial_dir)
+    if tk_res:
+        log_info(f"Native files dialog selected {len(tk_res)} files (Tkinter direct)")
+        return tk_res
+
+    ps_res = _show_powershell_files(title=title, initial_dir=initial_dir, filter_str=filter_str)
+    if ps_res:
+        log_info(f"Native files dialog selected {len(ps_res)} files (PowerShell direct)")
+        return ps_res
+
+    return []
+
+
 if __name__ == "__main__":
-    mode = sys.argv[1] if len(sys.argv) > 1 else "folder"
-    if mode == "folder":
-        print(select_folder("테스트 폴더 선택"))
+    import base64
+    import json
+
+    # If launched with an encoded JSON payload:
+    if len(sys.argv) > 1 and len(sys.argv[1]) > 5:
+        raw_arg = sys.argv[1]
+        try:
+            cfg = json.loads(base64.b64decode(raw_arg.encode("ascii")).decode("utf-8"))
+            m = cfg.get("mode", "folder")
+            t = cfg.get("title", "")
+            d = cfg.get("initial_dir", "")
+            f = cfg.get("filter_str", "CSV / CDT Files (*.csv;*.cdt)|*.csv;*.cdt|All Files (*.*)|*.*")
+
+            result = None
+            if m == "folder":
+                result = _show_tkinter_folder(t, d)
+                if not result:
+                    result = _show_powershell_folder(t, d)
+            else:
+                result = _show_tkinter_files(t, d)
+                if not result:
+                    result = _show_powershell_files(t, d, f)
+
+            result_json = json.dumps(result if result is not None else "")
+            res_b64 = base64.b64encode(result_json.encode("utf-8")).decode("ascii")
+            print(f"DIALOG_RES_B64:{res_b64}")
+            sys.exit(0)
+        except Exception as e:
+            err_json = json.dumps("")
+            print(f"DIALOG_RES_B64:{base64.b64encode(err_json.encode('utf-8')).decode('ascii')}")
+            sys.exit(1)
     else:
-        print(select_files("테스트 파일 선택"))
+        # Standard CLI test
+        mode = sys.argv[1] if len(sys.argv) > 1 else "folder"
+        if mode == "folder":
+            print("Selected folder:", select_folder("테스트 폴더 선택"))
+        else:
+            print("Selected files:", select_files("테스트 파일 선택"))
