@@ -1423,8 +1423,8 @@
                     <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
                             <i class="fa-solid fa-chart-candlestick" style="color: var(--accent-cyan);" id="chart-title-icon"></i>
-                            <span id="chart-main-title">키움 국내선물 틱봉 차트</span>
-                            <span id="chart-mode-badge" class="badge badge-emerald" style="font-size: 0.72rem; margin-left: 4px;">분석 모드</span>
+                            <span id="chart-main-title">키움 스타일 국내선물 틱봉 차트 (CSV 백테스트)</span>
+                            <span id="chart-mode-badge" class="badge badge-emerald" style="font-size: 0.72rem; margin-left: 4px;">CSV 백테스트 분석</span>
                         </div>
                     </div>
 
@@ -3547,6 +3547,7 @@ ${kw.params}
             });
 
             if (mode === 'MOCK') {
+                currentChartFeedMode = 'REALTIME';
                 if (btnMock) { btnMock.classList.add('active-mode-tab'); btnMock.style.color = '#fff'; btnMock.style.background = ''; }
                 if (domSidebar) domSidebar.style.display = 'none';
                 if (ovsSidebar) ovsSidebar.style.display = 'none';
@@ -3573,6 +3574,7 @@ ${kw.params}
                 renderMockOrderHistory();
                 showToast("실시간 모의매매 (Kiwoom Live) 모드로 전환되었습니다.", "fa-tower-broadcast");
             } else if (mode === 'OVERSEAS') {
+                currentChartFeedMode = 'HISTORICAL';
                 if (btnOvs) { btnOvs.classList.add('active-mode-tab'); btnOvs.style.color = '#fff'; btnOvs.style.background = ''; }
                 if (domSidebar) domSidebar.style.display = 'none';
                 if (ovsSidebar) ovsSidebar.style.display = 'flex';
@@ -3602,7 +3604,8 @@ ${kw.params}
                 fetchOverseasStatus();
                 showToast("해외선물(Global Futures CDT) 모드로 전환되었습니다.", "fa-globe");
             } else {
-                // DOMESTIC
+                // DOMESTIC: Pure CSV Backtest Chart
+                currentChartFeedMode = 'HISTORICAL';
                 if (btnDom) { btnDom.classList.add('active-mode-tab'); btnDom.style.color = '#fff'; btnDom.style.background = ''; }
                 if (domSidebar) domSidebar.style.display = 'flex';
                 if (ovsSidebar) ovsSidebar.style.display = 'none';
@@ -3618,14 +3621,14 @@ ${kw.params}
                 if (quickInfoText) quickInfoText.innerText = 'DuckDB 고속 벡터 백테스트 & 30개 지표 분석 모드';
                 if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = 'var(--accent-cyan)'; }
 
-                if (chartTitle) chartTitle.innerText = '키움 스타일 국내선물 틱봉 차트';
-                if (chartBadge) { chartBadge.innerText = '국내선물 백테스트'; chartBadge.className = 'badge badge-emerald'; }
+                if (chartTitle) chartTitle.innerText = '키움 스타일 국내선물 틱봉 차트 (CSV 백테스트)';
+                if (chartBadge) { chartBadge.innerText = 'CSV 백테스트 분석'; chartBadge.className = 'badge badge-emerald'; }
                 if (chartIcon) { chartIcon.className = 'fa-solid fa-chart-candlestick'; chartIcon.style.color = 'var(--accent-cyan)'; }
                 if (realtimeBar) realtimeBar.style.display = 'none';
 
                 stopRealtimePolling();
                 previewChart();
-                showToast("국내선물(KOSPI 200 CSV) 모드로 전환되었습니다.", "fa-won-sign");
+                showToast("국내선물(KOSPI 200 CSV 백테스트) 모드로 전환되었습니다.", "fa-won-sign");
             }
         }
 
@@ -5983,11 +5986,9 @@ ${kw.params}
 
                 if (statRes) {
                     updateKiwoomStatusUI(statRes);
-                    if (statRes.connected) {
-                        // Switch chart to REALTIME mode if connected
-                        if (currentChartFeedMode === 'HISTORICAL') {
-                            switchChartFeedMode('REALTIME');
-                        }
+                    if (statRes.connected && currentMarketMode === 'MOCK') {
+                        startRealtimePolling();
+                        fetchRealtimeBars(true);
                     }
                 }
             } catch (err) {
@@ -6156,28 +6157,10 @@ ${kw.params}
         }
 
         function switchChartFeedMode(mode) {
-            currentChartFeedMode = mode;
-            const btnHist = document.getElementById('btn-chart-mode-hist');
-            const btnLive = document.getElementById('btn-chart-mode-live');
-            const bar = document.getElementById('realtime-tick-control-bar');
-            const title = document.getElementById('chart-main-title');
-
             if (mode === 'REALTIME') {
-                if (btnHist) { btnHist.classList.remove('active-mode-tab'); btnHist.style.color = 'var(--text-muted)'; }
-                if (btnLive) { btnLive.classList.add('active-mode-tab'); btnLive.style.color = '#fff'; }
-                if (bar) bar.style.display = 'flex';
-                if (title) title.innerText = '키움 국내선물 실시간 틱차트 (LIVE)';
-                startRealtimePolling();
-                fetchRealtimeBars(true);
-                showToast("실시간 틱차트 스트리밍 모드로 전환되었습니다.", "fa-bolt");
+                switchMarketMode('MOCK');
             } else {
-                if (btnHist) { btnHist.classList.add('active-mode-tab'); btnHist.style.color = '#fff'; }
-                if (btnLive) { btnLive.classList.remove('active-mode-tab'); btnLive.style.color = 'var(--text-muted)'; }
-                if (bar) bar.style.display = 'none';
-                if (title) title.innerText = (currentMarketMode === 'OVERSEAS') ? '키움 영웅문 Global 해외선물 CDT 캔들 차트' : '키움 스타일 국내선물 틱봉 차트';
-                stopRealtimePolling();
-                previewChart();
-                showToast("과거 데이터 분석 틱봉 모드로 전환되었습니다.", "fa-chart-line");
+                switchMarketMode('DOMESTIC');
             }
         }
 
@@ -6275,18 +6258,20 @@ ${kw.params}
         }
 
         function refreshActiveChart() {
-            if (currentMarketMode === 'MOCK' || currentChartFeedMode === 'REALTIME') {
+            if (currentMarketMode === 'MOCK') {
                 fetchRealtimeBars(true);
+            } else if (currentMarketMode === 'OVERSEAS') {
+                previewOverseasChart();
             } else {
-                if (currentMarketMode === 'OVERSEAS') previewOverseasChart();
-                else previewChart();
+                previewChart();
             }
         }
 
         function startRealtimePolling() {
             stopRealtimePolling();
+            if (currentMarketMode !== 'MOCK') return;
             realtimeTickTimer = setInterval(() => {
-                if ((currentMarketMode === 'MOCK' || currentChartFeedMode === 'REALTIME') && !isRealtimePaused) {
+                if (currentMarketMode === 'MOCK' && !isRealtimePaused) {
                     fetchRealtimeBars(false);
                 }
             }, 1000);
@@ -6300,6 +6285,7 @@ ${kw.params}
         }
 
         async function fetchRealtimeBars(forceFullRender = false) {
+            if (currentMarketMode !== 'MOCK') return;
             try {
                 const res = await fetch(`/api/kiwoom/realtime-bars?tick_size=${currentRealtimeTickSize}&limit=300`);
                 const data = await res.json();
@@ -6442,6 +6428,7 @@ ${kw.params}
             await fetchStatus();
             await fetchKiwoomConfigAndStatus();
             quickSelectTickSize(10000);
+            switchMarketMode('DOMESTIC');
         });
     </script>
 </body>
