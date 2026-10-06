@@ -95,6 +95,12 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
                 self._handle_kiwoom_config()
             elif path == '/api/kiwoom/realtime-bars':
                 self._handle_kiwoom_realtime_bars(parsed)
+            elif path == '/api/dl/config':
+                self._handle_dl_get_config()
+            elif path == '/api/dl/progress':
+                self._handle_dl_progress()
+            elif path == '/api/dl/reports':
+                self._handle_dl_reports()
             else:
                 self.send_error(404, "File Not Found")
         except Exception as e:
@@ -152,6 +158,12 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
                 self._handle_kiwoom_set_tick_size(body)
             elif path == '/api/kiwoom/toggle-streaming':
                 self._handle_kiwoom_toggle_streaming(body)
+            elif path == '/api/dl/save-config':
+                self._handle_dl_save_config(body)
+            elif path == '/api/dl/start':
+                self._handle_dl_start_pipeline(body)
+            elif path == '/api/dl/stop':
+                self._handle_dl_stop_pipeline()
             else:
                 self.send_error(404, "Unknown Endpoint")
         except Exception as e:
@@ -1235,6 +1247,83 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
             "is_paused": is_paused,
             "speed": km.feeder_speed
         }, ensure_ascii=False).encode('utf-8'))
+
+    # =========================================================================
+    # Deep Learning & Transfer Learning Handlers
+    # =========================================================================
+    def _handle_dl_get_config(self):
+        from deep_learning.config_loader import load_config
+        cfg = load_config()
+        self._set_json_headers(200)
+        self._safe_write(json.dumps(cfg, ensure_ascii=False).encode('utf-8'))
+
+    def _handle_dl_save_config(self, body: dict):
+        from deep_learning.config_loader import DEFAULT_CONFIG_PATH
+        import yaml
+        with open(DEFAULT_CONFIG_PATH, 'w', encoding='utf-8') as f:
+            yaml.dump(body, f, allow_unicode=True, sort_keys=False)
+        self._set_json_headers(200)
+        self._safe_write(json.dumps({"status": "success", "message": "설정이 성공적으로 저장되었습니다."}, ensure_ascii=False).encode('utf-8'))
+
+    def _handle_dl_progress(self):
+        # Read latest progress or log file
+        from config import BASE_DIR
+        log_file = BASE_DIR / "logs" / "deep_learning_pipeline.log"
+        reg_file = BASE_DIR / "models" / "registry.json"
+        log_content = ""
+        if log_file.exists():
+            try:
+                with open(log_file, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                    log_content = "".join(lines[-40:])
+            except Exception:
+                pass
+        
+        reg_data = []
+        if reg_file.exists():
+            try:
+                with open(reg_file, "r", encoding="utf-8") as rf:
+                    reg_data = json.load(rf)
+            except Exception:
+                reg_data = []
+
+        self._set_json_headers(200)
+        self._safe_write(json.dumps({
+            "status": "success",
+            "log": log_content,
+            "registry": reg_data
+        }, ensure_ascii=False).encode('utf-8'))
+
+    def _handle_dl_start_pipeline(self, body: dict):
+        import subprocess
+        from config import BASE_DIR
+        script_path = BASE_DIR / "main_pipeline.py"
+        flags = 0x08000000 if sys.platform == 'win32' else 0
+        cmd = [sys.executable, str(script_path)]
+        if body.get("max_days"):
+            cmd.extend(["--max-days", str(body["max_days"])])
+        
+        subprocess.Popen(cmd, creationflags=flags)
+        self._set_json_headers(200)
+        self._safe_write(json.dumps({"status": "started", "message": "딥러닝 파이프라인 백그라운드 구동 시작"}, ensure_ascii=False).encode('utf-8'))
+
+    def _handle_dl_stop_pipeline(self):
+        self._set_json_headers(200)
+        self._safe_write(json.dumps({"status": "stopped", "message": "파이프라인 중지 신호 전달"}, ensure_ascii=False).encode('utf-8'))
+
+    def _handle_dl_reports(self):
+        from config import BASE_DIR
+        report_csv = BASE_DIR / "output" / "dl_reports" / "model_comparison_matrix.csv"
+        data = []
+        if report_csv.exists():
+            try:
+                df = pd.read_csv(report_csv)
+                data = df.to_dict(orient="records")
+            except Exception:
+                data = []
+        self._set_json_headers(200)
+        self._safe_write(json.dumps({"status": "success", "reports": data}, ensure_ascii=False).encode('utf-8'))
+
 
 
 

@@ -748,6 +748,9 @@
             <button id="tab-mode-mock" class="btn" onclick="switchMarketMode('MOCK')" style="padding: 8px 18px; font-size: 0.85rem; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; color: var(--text-muted); background: transparent; display: flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-tower-broadcast" style="color: #10b981;"></i> 실시간 모의매매 (Kiwoom Live)
             </button>
+            <button id="tab-mode-dl" class="btn" onclick="switchMarketMode('DEEP_LEARNING')" style="padding: 8px 18px; font-size: 0.85rem; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; color: var(--text-muted); background: transparent; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-brain" style="color: #a855f7;"></i> 딥러닝 (전이학습/PatchTST)
+            </button>
         </div>
         <div id="mode-quick-info" style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent-cyan);">
             <i class="fa-solid fa-bolt"></i> <span id="mode-quick-info-text">DuckDB 고속 벡터 백테스트 & 30개 지표 분석 모드</span>
@@ -1360,6 +1363,75 @@
                 </div>
 
             </div>
+
+            <!-- Deep Learning Sidebar Container -->
+            <div id="sidebar-dl-container" style="display: none; flex-direction: column; gap: 14px;">
+                <div class="step-card">
+                    <div class="step-header">
+                        <span class="step-badge" style="background: rgba(168,85,247,0.2); color: #c084fc;">DL 1</span>
+                        <span class="step-title">동적 틱 주기 윈도우 설정</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; gap: 6px;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.72rem; color: var(--text-dim);">시작 (Start)</label>
+                                <input type="number" id="dl-tick-start" class="input-control" value="100" style="width: 100%; padding: 6px; font-size: 0.8rem;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.72rem; color: var(--text-dim);">종료 (End)</label>
+                                <input type="number" id="dl-tick-end" class="input-control" value="1000" style="width: 100%; padding: 6px; font-size: 0.8rem;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.72rem; color: var(--text-dim);">간격 (Step)</label>
+                                <input type="number" id="dl-tick-step" class="input-control" value="10" style="width: 100%; padding: 6px; font-size: 0.8rem;">
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; padding: 4px 0;">
+                            <span style="color: var(--text-dim);">2단계 탐색 (Coarse-to-Fine):</span>
+                            <input type="checkbox" id="dl-coarse-to-fine" checked style="cursor: pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-header">
+                        <span class="step-badge" style="background: rgba(168,85,247,0.2); color: #c084fc;">DL 2</span>
+                        <span class="step-title">딥러닝 & 전이학습 모델 선택</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.76rem;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="dl-model-patchtst" checked> <span>PatchTST (패치 기반 트랜스포머)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="dl-model-foundation" checked> <span>TimeSeries Foundation (전이학습)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="dl-model-lgbm" checked> <span>LightGBM (Optuna 튜닝)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="dl-model-xgb" checked> <span>XGBoost</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="dl-model-rf" checked> <span>Random Forest & Logistic (기준)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-header">
+                        <span class="step-badge" style="background: rgba(168,85,247,0.2); color: #c084fc;">DL 3</span>
+                        <span class="step-title">파이프라인 제어</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <button type="button" class="btn btn-primary" onclick="startDeepLearningPipeline()" style="width: 100%; padding: 10px; font-weight: 700; background: linear-gradient(135deg, #9333ea, #6366f1);">
+                            <i class="fa-solid fa-play"></i> 딥러닝 전체 파이프라인 가동
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="saveDlConfig()" style="width: 100%; padding: 8px; font-size: 0.78rem;">
+                            <i class="fa-solid fa-floppy-disk"></i> 설정(config.yaml)에 저장
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Right Content -->
@@ -1685,6 +1757,49 @@
                         </thead>
                         <tbody id="mock-orders-tbody">
                             <tr><td colspan="7" style="color: var(--text-dim); padding: 24px;">체결된 모의 주문 내역이 없습니다.</td></tr>
+                </div>
+            </div>
+
+            <!-- Deep Learning Matrix & Real-time ETA Card -->
+            <div class="glass-card table-card" id="deep-learning-card" style="display: none;">
+                <div class="chart-header">
+                    <div class="chart-title">
+                        <i class="fa-solid fa-brain" style="color: #c084fc;"></i>
+                        <span>딥러닝 & 전이학습 (PatchTST / TimeSeries Foundation) 모델 벤치마크 매트릭스</span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" onclick="fetchDlReports()" style="padding: 4px 10px; font-size: 0.75rem;">
+                            <i class="fa-solid fa-arrows-rotate"></i> 매트릭스 새로고침
+                        </button>
+                    </div>
+                </div>
+
+                <!-- DL Real-Time Progress & ETA Banner -->
+                <div id="dl-progress-banner" style="background: rgba(147, 51, 234, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 12px; margin: 12px 16px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace;">
+                        <span style="color: #c084fc; font-weight: 700;"><i class="fa-solid fa-microchip"></i> 실시간 학습 로그 및 진행률:</span>
+                        <span id="dl-banner-eta" style="color: var(--accent-cyan); font-weight: 600;">상태: 대기 중</span>
+                    </div>
+                    <pre id="dl-live-log-box" style="margin: 0; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 6px; font-size: 0.72rem; color: #cbd5e1; max-height: 120px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap;">로그가 여기에 실시간으로 표시됩니다...</pre>
+                </div>
+
+                <div class="perf-table-wrapper" style="max-height: 380px; overflow-y: auto;">
+                    <table class="perf-table">
+                        <thead>
+                            <tr>
+                                <th>틱 주기 (Window)</th>
+                                <th>모델명</th>
+                                <th>샤프비율 (Sharpe)</th>
+                                <th>MDD (%)</th>
+                                <th>총 거래수</th>
+                                <th>승률 (%)</th>
+                                <th>누적수익률 (%)</th>
+                                <th>학습소요 (s)</th>
+                                <th>추론지연 (ms)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dl-matrix-tbody">
+                            <tr><td colspan="9" style="color: var(--text-dim); padding: 24px;">딥러닝 파이프라인을 실행하면 주기별 모델 성과가 여기에 실시간 집계됩니다.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -3517,10 +3632,12 @@ ${kw.params}
             const btnDom = document.getElementById('tab-mode-domestic');
             const btnOvs = document.getElementById('tab-mode-overseas');
             const btnMock = document.getElementById('tab-mode-mock');
+            const btnDl = document.getElementById('tab-mode-dl');
 
             const domSidebar = document.getElementById('sidebar-domestic-container');
             const ovsSidebar = document.getElementById('sidebar-overseas-container');
             const mockSidebar = document.getElementById('sidebar-mock-container');
+            const dlSidebar = document.getElementById('sidebar-dl-container');
 
             const metricsBacktest = document.getElementById('metrics-grid-backtest');
             const metricsMock = document.getElementById('metrics-grid-mock');
@@ -3528,6 +3645,7 @@ ${kw.params}
             const tableRanking = document.getElementById('table-card-ranking');
             const tableBreakdown = document.getElementById('breakdown-card');
             const tableMock = document.getElementById('mock-trading-card');
+            const tableDl = document.getElementById('deep-learning-card');
 
             const quickInfoText = document.getElementById('mode-quick-info-text');
             const quickInfo = document.getElementById('mode-quick-info');
@@ -3538,7 +3656,7 @@ ${kw.params}
             const realtimeBar = document.getElementById('realtime-tick-control-bar');
 
             // Reset tab button styles
-            [btnDom, btnOvs, btnMock].forEach(b => {
+            [btnDom, btnOvs, btnMock, btnDl].forEach(b => {
                 if (b) {
                     b.classList.remove('active-mode-tab');
                     b.style.color = 'var(--text-muted)';
@@ -3546,7 +3664,36 @@ ${kw.params}
                 }
             });
 
-            if (mode === 'MOCK') {
+            if (mode === 'DEEP_LEARNING') {
+                currentChartFeedMode = 'HISTORICAL';
+                if (btnDl) { btnDl.classList.add('active-mode-tab'); btnDl.style.color = '#fff'; btnDl.style.background = ''; }
+                if (domSidebar) domSidebar.style.display = 'none';
+                if (ovsSidebar) ovsSidebar.style.display = 'none';
+                if (mockSidebar) mockSidebar.style.display = 'none';
+                if (dlSidebar) dlSidebar.style.display = 'flex';
+
+                if (metricsBacktest) metricsBacktest.style.display = 'grid';
+                if (metricsMock) metricsMock.style.display = 'none';
+
+                if (tableRanking) tableRanking.style.display = 'none';
+                if (tableBreakdown) tableBreakdown.style.display = 'none';
+                if (tableMock) tableMock.style.display = 'none';
+                if (tableDl) tableDl.style.display = 'block';
+
+                if (quickInfoText) quickInfoText.innerText = '전이학습(Transfer Learning) & PatchTST 틱 주기 최적화 모드';
+                if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = '#c084fc'; }
+
+                if (chartTitle) chartTitle.innerText = '딥러닝/전이학습 모델 비교 벤치마크';
+                if (chartBadge) { chartBadge.innerText = '딥러닝 분석'; chartBadge.className = 'badge badge-purple'; }
+                if (chartIcon) { chartIcon.className = 'fa-solid fa-brain'; chartIcon.style.color = '#c084fc'; }
+                if (realtimeBar) realtimeBar.style.display = 'none';
+
+                stopRealtimePolling();
+                loadDlConfig();
+                fetchDlReports();
+                startDlProgressPolling();
+                showToast("딥러닝/전이학습 모드로 전환되었습니다.", "fa-brain");
+            } else if (mode === 'MOCK') {
                 currentChartFeedMode = 'REALTIME';
                 if (btnMock) { btnMock.classList.add('active-mode-tab'); btnMock.style.color = '#fff'; btnMock.style.background = ''; }
                 if (domSidebar) domSidebar.style.display = 'none';
@@ -3586,6 +3733,8 @@ ${kw.params}
                 if (tableRanking) tableRanking.style.display = 'block';
                 if (tableBreakdown) tableBreakdown.style.display = (breakdownData && breakdownData.length > 0) ? 'block' : 'none';
                 if (tableMock) tableMock.style.display = 'none';
+                if (tableDl) tableDl.style.display = 'none';
+                if (dlSidebar) dlSidebar.style.display = 'none';
 
                 if (quickInfoText) quickInfoText.innerText = 'CDT 캔들 바이너리 고속 파싱 & 중복제거 모드';
                 if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = '#f59e0b'; }
@@ -3617,6 +3766,8 @@ ${kw.params}
                 if (tableRanking) tableRanking.style.display = 'block';
                 if (tableBreakdown) tableBreakdown.style.display = (breakdownData && breakdownData.length > 0) ? 'block' : 'none';
                 if (tableMock) tableMock.style.display = 'none';
+                if (tableDl) tableDl.style.display = 'none';
+                if (dlSidebar) dlSidebar.style.display = 'none';
 
                 if (quickInfoText) quickInfoText.innerText = 'DuckDB 고속 벡터 백테스트 & 30개 지표 분석 모드';
                 if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = 'var(--accent-cyan)'; }
@@ -6419,6 +6570,147 @@ ${kw.params}
 
             } catch (err) {
                 console.error("fetchRealtimeBars error:", err);
+            }
+        }
+
+        // =========================================================================
+        // Deep Learning & Transfer Learning UI Functions
+        // =========================================================================
+        let dlProgressInterval = null;
+
+        async function loadDlConfig() {
+            try {
+                const res = await fetch('/api/dl/config');
+                const cfg = await res.json();
+                if (cfg && cfg.tick_window) {
+                    document.getElementById('dl-tick-start').value = cfg.tick_window.start || 100;
+                    document.getElementById('dl-tick-end').value = cfg.tick_window.end || 1000;
+                    document.getElementById('dl-tick-step').value = cfg.tick_window.step || 10;
+                    if (cfg.coarse_to_fine) {
+                        document.getElementById('dl-coarse-to-fine').checked = !!cfg.coarse_to_fine.enabled;
+                    }
+                }
+            } catch (e) {
+                console.error("loadDlConfig error:", e);
+            }
+        }
+
+        async function saveDlConfig() {
+            const startVal = parseInt(document.getElementById('dl-tick-start').value) || 100;
+            const endVal = parseInt(document.getElementById('dl-tick-end').value) || 1000;
+            const stepVal = parseInt(document.getElementById('dl-tick-step').value) || 10;
+            const coarseVal = document.getElementById('dl-coarse-to-fine').checked;
+
+            const payload = {
+                data_dir: "csv",
+                symbol: "KOSPI_F",
+                cache_dir: "data/dl_cache",
+                tick_window: { start: startVal, end: endVal, step: stepVal },
+                coarse_to_fine: { enabled: coarseVal, coarse_step: 100, top_n_regions: 2, fine_neighborhood: 50 },
+                cost_model: { commission_rate: 0.00003, slippage_mode: "fixed_and_volume", fixed_slippage_tick: 0.05, tick_value_krw: 250000, volume_impact_coef: 0.00001 },
+                validation: { mode: "walk_forward", train_years: 2.0, test_months: 6.0, embargo_pct: 0.01 },
+                modeling: {
+                    task_type: "multiclass",
+                    models_to_run: ["logistic_regression", "random_forest", "xgboost", "lightgbm", "patch_tst", "foundation_ts"],
+                    optuna_trials: 15,
+                    deep_learning: { epochs: 20, batch_size: 64, learning_rate: 0.001, seq_len: 32, patch_size: 4 }
+                },
+                selection_criteria: { min_trades: 30, min_sharpe: 1.0, max_mdd_pct: 25.0, consistency_ratio: 0.6 },
+                model_save_dir: "models/saved_models",
+                registry_path: "models/registry.json",
+                drift_monitoring: { lookback_bars: 1000, psi_threshold: 0.25 },
+                progress_display: { enabled: true, update_interval_sec: 1.0, log_to_file: true, log_file_path: "logs/deep_learning_pipeline.log" }
+            };
+
+            try {
+                const res = await fetch('/api/dl/save-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                showToast("설정 파일(config.yaml)에 성공적으로 저장되었습니다.", "fa-floppy-disk");
+            } catch (e) {
+                showToast("설정 저장 실패: " + e, "fa-triangle-exclamation");
+            }
+        }
+
+        async function startDeepLearningPipeline() {
+            await saveDlConfig();
+            try {
+                const res = await fetch('/api/dl/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ max_days: 5 })  // Fast demo execution on current CSVs
+                });
+                const data = await res.json();
+                showToast("딥러닝 파이프라인 가동 시작!", "fa-microchip");
+                startDlProgressPolling();
+            } catch (e) {
+                showToast("파이프라인 실행 요청 오류: " + e, "fa-triangle-exclamation");
+            }
+        }
+
+        function startDlProgressPolling() {
+            if (dlProgressInterval) clearInterval(dlProgressInterval);
+            dlProgressInterval = setInterval(pollDlProgress, 1500);
+            pollDlProgress();
+        }
+
+        async function pollDlProgress() {
+            try {
+                const res = await fetch('/api/dl/progress');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    const box = document.getElementById('dl-live-log-box');
+                    if (box && data.log) {
+                        box.innerText = data.log;
+                        box.scrollTop = box.scrollHeight;
+                    }
+                    const etaBanner = document.getElementById('dl-banner-eta');
+                    if (etaBanner && data.log) {
+                        const lines = data.log.trim().split('\n');
+                        const lastLine = lines[lines.length - 1];
+                        if (lastLine.includes('ETA:')) {
+                            etaBanner.innerText = lastLine.substring(lastLine.indexOf('ETA:'));
+                        } else if (lastLine.includes('Complete')) {
+                            etaBanner.innerText = '상태: 전체 완료 (Completed)';
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore silent poll errors
+            }
+        }
+
+        async function fetchDlReports() {
+            try {
+                const res = await fetch('/api/dl/reports');
+                const data = await res.json();
+                const tbody = document.getElementById('dl-matrix-tbody');
+                if (!tbody) return;
+
+                if (data.reports && data.reports.length > 0) {
+                    tbody.innerHTML = data.reports.map(r => {
+                        const sharpeColor = r.sharpe_ratio >= 1.5 ? '#10b981' : (r.sharpe_ratio >= 1.0 ? '#00f2fe' : 'inherit');
+                        const retColor = r.cumulative_return_pct >= 0 ? '#10b981' : '#f43f5e';
+                        return `
+                            <tr>
+                                <td style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent-cyan);">${r.tick_window}T</td>
+                                <td style="font-weight: 700; color: #c084fc;">${r.model_name}</td>
+                                <td style="font-weight: 800; color: ${sharpeColor};">${r.sharpe_ratio.toFixed(2)}</td>
+                                <td style="color: #f43f5e;">${r.max_drawdown_pct.toFixed(2)}%</td>
+                                <td>${r.total_trades}</td>
+                                <td>${r.win_rate_pct.toFixed(1)}%</td>
+                                <td style="font-weight: 700; color: ${retColor};">${r.cumulative_return_pct.toFixed(2)}%</td>
+                                <td style="color: var(--text-dim);">${r.training_time_sec}s</td>
+                                <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;">${r.inference_latency_ms}ms</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+            } catch (e) {
+                console.error("fetchDlReports error:", e);
             }
         }
 
