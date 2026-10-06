@@ -224,80 +224,19 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
 
     def _open_native_folder_dialog(self, title: str = "폴더를 선택하세요", initial_dir: str = ""):
-        """
-        Open native Windows folder selection dialog guaranteed to appear in foreground (TopMost).
-        Priority 1: Python tkinter askdirectory with topmost & focus_force (fast, native Explorer style).
-        Priority 2: PowerShell FolderBrowserDialog with active TopMost dummy form.
-        """
-        import subprocess
-        import sys
-        import base64
-        import os
-
-        # 1. Try tkinter via sub-process (completely avoids threading / COM collision, always TopMost)
-        tk_script = (
-            "import tkinter as tk, tkinter.filedialog as fd, base64, sys\n"
-            "try:\n"
-            "    root = tk.Tk()\n"
-            "    root.withdraw()\n"
-            "    root.wm_attributes('-topmost', 1)\n"
-            "    root.lift()\n"
-            "    root.focus_force()\n"
-            f"    path = fd.askdirectory(title={repr(title)}, initialdir={repr(initial_dir or '')})\n"
-            "    root.destroy()\n"
-            "    if path:\n"
-            "        sys.stdout.buffer.write(base64.b64encode(path.encode('utf-8')))\n"
-            "except Exception:\n"
-            "    sys.exit(1)\n"
-        )
-        flags = 0x08000000 if sys.platform == 'win32' else 0
-        try:
-            raw = subprocess.check_output([sys.executable, "-c", tk_script], creationflags=flags).strip()
-            if raw:
-                selected = base64.b64decode(raw).decode('utf-8', errors='replace').strip()
-                if selected and os.path.isdir(selected):
-                    return selected
-        except Exception as tk_err:
-            log_error(f"tkinter folder dialog fallback needed: {tk_err}")
-
-        # 2. PowerShell Fallback with active, foreground TopMost form
-        ps_cmd = [
-            "powershell", "-NoProfile", "-Command",
-            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-            "Add-Type -AssemblyName System.Windows.Forms; "
-            "$form = New-Object System.Windows.Forms.Form; "
-            "$form.TopMost = $true; "
-            "$form.TopLevel = $true; "
-            "$form.StartPosition = 'CenterScreen'; "
-            "$form.Show(); "
-            "$form.Activate(); "
-            "$form.BringToFront(); "
-            "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
-            f"$f.Description = '{title}'; "
-            "$f.ShowNewFolderButton = $false; "
-            + (f"$f.SelectedPath = '{initial_dir}'; " if initial_dir else "") +
-            "$res = $f.ShowDialog($form); "
-            "$form.Close(); "
-            "if ($res -eq [System.Windows.Forms.DialogResult]::OK) { "
-            "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($f.SelectedPath); "
-            "    [System.Convert]::ToBase64String($bytes) "
-            "}"
-        ]
-        try:
-            raw_out = subprocess.check_output(ps_cmd, creationflags=flags).decode('ascii', errors='ignore').strip()
-            if raw_out:
-                selected = base64.b64decode(raw_out).decode('utf-8', errors='replace').strip()
-                if selected and os.path.isdir(selected):
-                    return selected
-        except Exception as ps_err:
-            log_error(f"PowerShell folder dialog fallback failed: {ps_err}")
-
-        return None
+        """Open native Windows folder selection dialog in foreground via engine.native_dialog."""
+        from engine.native_dialog import select_folder
+        return select_folder(title=title, initial_dir=initial_dir)
 
     def _handle_browse_folder(self):
         """Open native Windows folder browser dialog for domestic trading."""
-        from config import save_settings
-        folder_str = self._open_native_folder_dialog(title="코스피200 선물 틱데이터 CSV 폴더 선택")
+        from config import save_settings, load_settings
+        cur_settings = load_settings()
+        init_dir = cur_settings.get("last_csv_folder", "")
+        folder_str = self._open_native_folder_dialog(
+            title="코스피200 선물 틱데이터 CSV 폴더 선택",
+            initial_dir=init_dir
+        )
         if folder_str:
             save_settings({"last_csv_folder": folder_str})
             self._set_json_headers(200)
@@ -308,45 +247,27 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
         self._safe_write(json.dumps({"status": "cancelled", "folder": None}).encode('utf-8'))
 
     def _handle_browse_files(self):
-        """Open native Windows OpenFileDialog with multiselect enabled and lossless UTF-8 / Base64 encoding."""
-        import subprocess
-        import base64
-        from config import save_settings
-
-        cmd = [
-            "powershell", "-NoProfile", "-Command",
-            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-            "Add-Type -AssemblyName System.Windows.Forms; "
-            "$top = New-Object System.Windows.Forms.Form; "
-            "$top.TopMost = $true; "
-            "$f = New-Object System.Windows.Forms.OpenFileDialog; "
-            "$f.Filter = 'CSV Files (*.csv)|*.csv|All Files (*.*)|*.*'; "
-            "$f.Multiselect = $true; "
-            "$f.Title = 'Select One or More Tick CSV Files (단일 또는 복수 CSV 파일 선택)'; "
-            "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) { "
-            "    $joined = [string]::Join(';', $f.FileNames); "
-            "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined); "
-            "    [System.Convert]::ToBase64String($bytes) "
-            "}"
-        ]
-        flags = 0x08000000 if sys.platform == 'win32' else 0
-        try:
-            raw_out = subprocess.check_output(cmd, creationflags=flags).decode('ascii', errors='ignore').strip()
-            if raw_out:
-                files_str = base64.b64decode(raw_out).decode('utf-8', errors='replace').strip()
-                if files_str:
-                    file_list = [f.strip() for f in files_str.split(';') if f.strip()]
-                    save_settings({"last_csv_folder": files_str})
-                    self._set_json_headers(200)
-                    self._safe_write(json.dumps({
-                        "status": "success", 
-                        "files_str": files_str, 
-                        "files": file_list,
-                        "count": len(file_list)
-                    }, ensure_ascii=False).encode('utf-8'))
-                    return
-        except Exception as e:
-            log_error("Error opening OpenFileDialog", exc=e)
+        """Open native Windows OpenFileDialog with multiselect enabled."""
+        from config import save_settings, load_settings
+        from engine.native_dialog import select_files
+        cur_settings = load_settings()
+        init_dir = cur_settings.get("last_csv_folder", "")
+        file_list = select_files(
+            title="Select One or More Tick CSV Files (단일 또는 복수 CSV 파일 선택)",
+            initial_dir=init_dir,
+            filter_str="CSV Files (*.csv)|*.csv|All Files (*.*)|*.*"
+        )
+        if file_list:
+            files_str = ";".join(file_list)
+            save_settings({"last_csv_folder": files_str})
+            self._set_json_headers(200)
+            self._safe_write(json.dumps({
+                "status": "success", 
+                "files_str": files_str, 
+                "files": file_list,
+                "count": len(file_list)
+            }, ensure_ascii=False).encode('utf-8'))
+            return
 
         self._set_json_headers(200)
         self._safe_write(json.dumps({"status": "cancelled", "files": []}).encode('utf-8'))
@@ -388,73 +309,35 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_overseas_browse_files(self):
         """Open native Windows OpenFileDialog with multiselect for .cdt and .csv files."""
-        import subprocess
-        import base64
-        cmd = [
-            "powershell", "-NoProfile", "-Command",
-            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-            "Add-Type -AssemblyName System.Windows.Forms; "
-            "$top = New-Object System.Windows.Forms.Form; "
-            "$top.TopMost = $true; "
-            "$f = New-Object System.Windows.Forms.OpenFileDialog; "
-            "$f.Filter = 'CDT & CSV Files (*.cdt;*.csv)|*.cdt;*.csv|CSV Files (*.csv)|*.csv|CDT Files (*.cdt)|*.cdt|All Files (*.*)|*.*'; "
-            "$f.Multiselect = $true; "
-            "$f.Title = 'Select Overseas Futures CDT / CSV Files (해외선물 CDT / CSV 파일 선택)'; "
-            "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) { "
-            "    $joined = [string]::Join(';', $f.FileNames); "
-            "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined); "
-            "    [System.Convert]::ToBase64String($bytes) "
-            "}"
-        ]
-        flags = 0x08000000 if sys.platform == 'win32' else 0
-        try:
-            raw_out = subprocess.check_output(cmd, creationflags=flags).decode('ascii', errors='ignore').strip()
-            if raw_out:
-                files_str = base64.b64decode(raw_out).decode('utf-8', errors='replace').strip()
-                if files_str:
-                    file_list = [f.strip() for f in files_str.split(';') if f.strip()]
-                    self._set_json_headers(200)
-                    self._safe_write(json.dumps({
-                        "status": "success",
-                        "files_str": files_str,
-                        "files": file_list,
-                        "count": len(file_list)
-                    }, ensure_ascii=False).encode('utf-8'))
-                    return
-        except Exception as e:
-            log_error("Error opening OpenFileDialog for CDT", exc=e)
+        from engine.native_dialog import select_files
+        file_list = select_files(
+            title="Select Overseas Futures CDT / CSV Files (해외선물 CDT / CSV 파일 선택)",
+            filter_str="CDT & CSV Files (*.cdt;*.csv)|*.cdt;*.csv|CSV Files (*.csv)|*.csv|CDT Files (*.cdt)|*.cdt|All Files (*.*)|*.*"
+        )
+        if file_list:
+            files_str = ";".join(file_list)
+            self._set_json_headers(200)
+            self._safe_write(json.dumps({
+                "status": "success",
+                "files_str": files_str,
+                "files": file_list,
+                "count": len(file_list)
+            }, ensure_ascii=False).encode('utf-8'))
+            return
 
         self._set_json_headers(200)
         self._safe_write(json.dumps({"status": "cancelled", "files": []}).encode('utf-8'))
 
     def _handle_overseas_browse_folder(self):
         """Open native Windows FolderBrowserDialog for selecting a folder of CDT files."""
-        import subprocess
-        import base64
-        cmd = [
-            "powershell", "-NoProfile", "-Command",
-            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-            "Add-Type -AssemblyName System.Windows.Forms; "
-            "$top = New-Object System.Windows.Forms.Form; "
-            "$top.TopMost = $true; "
-            "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
-            "$f.Description = 'Select Folder Containing Overseas Futures CDT/CSV Files (해외선물 CDT / CSV 폴더 선택)'; "
-            "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) { "
-            "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($f.SelectedPath); "
-            "    [System.Convert]::ToBase64String($bytes) "
-            "}"
-        ]
-        flags = 0x08000000 if sys.platform == 'win32' else 0
-        try:
-            raw_out = subprocess.check_output(cmd, creationflags=flags).decode('ascii', errors='ignore').strip()
-            if raw_out:
-                folder_str = base64.b64decode(raw_out).decode('utf-8', errors='replace').strip()
-                if folder_str:
-                    self._set_json_headers(200)
-                    self._safe_write(json.dumps({"status": "success", "folder": folder_str}, ensure_ascii=False).encode('utf-8'))
-                    return
-        except Exception as e:
-            log_error("Error opening FolderBrowserDialog for CDT", exc=e)
+        from engine.native_dialog import select_folder
+        folder_str = select_folder(
+            title="Select Folder Containing Overseas Futures CDT/CSV Files (해외선물 CDT / CSV 폴더 선택)"
+        )
+        if folder_str:
+            self._set_json_headers(200)
+            self._safe_write(json.dumps({"status": "success", "folder": folder_str}, ensure_ascii=False).encode('utf-8'))
+            return
 
         self._set_json_headers(200)
         self._safe_write(json.dumps({"status": "cancelled", "folder": None}).encode('utf-8'))

@@ -30,3 +30,5 @@ output/reports/*.pdf
 output/charts/*.html
 output/logs/*.log
 scratch/
+*.joblib
+models/
