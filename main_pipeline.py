@@ -70,14 +70,16 @@ def run_pipeline(
     tracker.log("==========================================================================")
 
     # -------------------------------------------------------------
-    # STAGE 1: Scan & Sort Raw Tick CSV Files
+    # STAGE 1: Scan & Automated Integrity Verification of CSV Files
     # -------------------------------------------------------------
     scanner = TickDataScanner(data_dir=cfg["data_dir"], symbol=cfg.get("symbol", "KOSPI_F"))
-    file_list = scanner.scan_and_sort_files()
-    if not file_list:
-        tracker.log(f"[!] No CSV files found in {cfg['data_dir']}")
+    valid_files, sanitize_report = scanner.scan_all_files_with_integrity()
+    if not valid_files:
+        tracker.log(f"[!] No valid CSV files found in {cfg['data_dir']}")
         return
 
+    tracker.log(f"[+] Automated File Integrity Scan Complete: {sanitize_report.summary()}")
+    file_list = valid_files
     if max_days:
         file_list = file_list[:max_days]
 
@@ -91,7 +93,7 @@ def run_pipeline(
             all_clean_ticks.append(df_clean)
         tracker.update_stage_step(1, f"{dt_str} ({len(df_clean):,} ticks)")
 
-    tracker.finish_stage(f"Total Daily Files: {len(all_clean_ticks)}")
+    tracker.finish_stage(f"Total Valid Files Processed: {len(all_clean_ticks)}")
     if not all_clean_ticks:
         tracker.log("[!] No valid tick data after sanitization.")
         return

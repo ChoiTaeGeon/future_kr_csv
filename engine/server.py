@@ -1303,36 +1303,47 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
         self._safe_write(json.dumps({"status": "cancelled", "folder": None}).encode('utf-8'))
 
     def _handle_dl_scan_folder(self, body: dict):
-        """Scans the specified data_dir using TickDataScanner and returns file count and date range."""
+        """Scans the specified data_dir using TickDataScanner with full automated integrity verification."""
         folder = body.get("folder", "csv")
         try:
             from deep_learning.data_loader import TickDataScanner
             scanner = TickDataScanner(data_dir=folder)
-            files = scanner.scan_and_sort_files()
-            if not files:
+            valid_files, report = scanner.scan_all_files_with_integrity()
+            if not valid_files:
                 self._set_json_headers(200)
                 self._safe_write(json.dumps({
                     "status": "empty",
                     "count": 0,
+                    "corrupted_count": report.corrupted_files_count,
                     "message": f"폴더 '{folder}'에서 유효한 틱데이터 CSV 파일을 찾을 수 없습니다."
                 }, ensure_ascii=False).encode('utf-8'))
                 return
 
-            start_dt = files[0][0]
-            end_dt = files[-1][0]
+            start_dt = valid_files[0][0]
+            end_dt = valid_files[-1][0]
+            
+            # Format top corrupted issues if any
+            corrupted_details = [
+                {"file": r.file_name, "issues": r.issues}
+                for r in report.integrity_results if not r.is_valid
+            ][:10]
+
             self._set_json_headers(200)
             self._safe_write(json.dumps({
                 "status": "success",
-                "count": len(files),
+                "count": len(valid_files),
+                "total_scanned": report.total_files_scanned,
+                "corrupted_count": report.corrupted_files_count,
                 "start_date": start_dt,
                 "end_date": end_dt,
-                "message": f"총 {len(files):,}개 CSV 파일 확인됨 ({start_dt} ~ {end_dt})"
+                "corrupted_details": corrupted_details,
+                "message": f"무결성 검사 완료: 유효 {len(valid_files):,}개 / 비정상 {report.corrupted_files_count}개 ({start_dt} ~ {end_dt})"
             }, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
             self._set_json_headers(200)
             self._safe_write(json.dumps({
                 "status": "error",
-                "message": f"폴더 스캔 오류: {e}"
+                "message": f"폴더 무결성 검사 오류: {e}"
             }, ensure_ascii=False).encode('utf-8'))
 
     def _handle_dl_progress(self):

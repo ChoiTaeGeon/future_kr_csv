@@ -16,6 +16,18 @@ import pandas as pd
 
 
 @dataclass
+class FileIntegrityResult:
+    file_path: str
+    file_name: str
+    date_str: Optional[str]
+    is_valid: bool
+    file_size_bytes: int
+    encoding_detected: str
+    row_count: int
+    issues: List[str] = field(default_factory=list)
+    sha256_hash: str = ""
+
+@dataclass
 class DailyQualityStats:
     date_str: str
     file_name: str
@@ -24,15 +36,20 @@ class DailyQualityStats:
     missing_count: int
     duplicate_count: int
     spike_count: int
+    zero_or_negative_price_count: int = 0
+    time_inversion_count: int = 0
     halt_periods: List[str] = field(default_factory=list)
+    integrity_status: str = "PASSED"  # PASSED, WARNING, CORRUPTED
 
 
 @dataclass
 class DataSanitizeReport:
     total_files_scanned: int
     valid_files_count: int
+    corrupted_files_count: int
     total_raw_ticks: int
     total_cleaned_ticks: int
+    integrity_results: List[FileIntegrityResult] = field(default_factory=list)
     daily_stats: List[DailyQualityStats] = field(default_factory=list)
 
     def summary(self) -> str:
@@ -40,9 +57,9 @@ class DataSanitizeReport:
         spk = sum(d.spike_count for d in self.daily_stats)
         miss = sum(d.missing_count for d in self.daily_stats)
         return (
-            f"Files: {self.valid_files_count}/{self.total_files_scanned} | "
-            f"Ticks: {self.total_cleaned_ticks:,} (Raw: {self.total_raw_ticks:,}) | "
-            f"Filtered: {miss:,} Missing, {dup:,} Dup, {spk:,} Spikes"
+            f"Files: {self.valid_files_count} Valid / {self.corrupted_files_count} Corrupted / {self.total_files_scanned} Total | "
+            f"Ticks: {self.total_cleaned_ticks:,} Cleaned (Raw: {self.total_raw_ticks:,}) | "
+            f"Filtered: {miss:,} Missing, {dup:,} Dups, {spk:,} Spikes"
         )
 
 
@@ -138,6 +155,122 @@ class TickDataScanner:
 
         return chosen_enc, col_map
 
+    def verify_file_integrity(self, file_path: Path) -> FileIntegrityResult:
+        """
+        Automated integrity check for a single CSV file:
+        1. Non-empty file size (> 100 bytes)
+        2. Valid text encoding detection (CP949, EUC-KR, UTF-8)
+        3. Header and required column presence (Time, Price, Volume)
+        4. Row count validity (> 10 rows)
+        5. SHA-256 checksum generation for change tracking
+        """
+        import hashlib
+        issues = []
+        file_size = file_path.stat().st_size
+        date_str = self.extract_date_from_name(file_path.name)
+
+        # 1. File size check
+        if file_size < 100:
+            issues.append(f"비정상적인 최소 파일 크기 ({file_size} bytes)")
+            return FileIntegrityResult(
+                file_path=str(file_path),
+                file_name=file_path.name,
+                date_str=date_str,
+                is_valid=False,
+                file_size_bytes=file_size,
+                encoding_detected="none",
+                row_count=0,
+                issues=issues
+            )
+
+        # Compute SHA-256
+        sha256 = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            while chunk := f.read(65536):
+                sha256.update(chunk)
+        sha_str = sha256.hexdigest()
+
+        # 2. Encoding detection & header check
+        chosen_enc = None
+        col_map = {}
+        for enc in ['cp949', 'euc-kr', 'utf-8', 'utf-8-sig', 'latin1']:
+            try:
+                sample = pd.read_csv(file_path, encoding=enc, nrows=5)
+                chosen_enc = enc
+                break
+            except Exception:
+                continue
+
+        if chosen_enc is None:
+            issues.append("인코딩 디코딩 실패 (지원 인코딩 형식 불일치)")
+            return FileIntegrityResult(
+                file_path=str(file_path),
+                file_name=file_path.name,
+                date_str=date_str,
+                is_valid=False,
+                file_size_bytes=file_size,
+                encoding_detected="corrupted",
+                row_count=0,
+                issues=issues,
+                sha256_hash=sha_str
+            )
+
+        try:
+            _, col_map = self.infer_columns_and_encoding(file_path)
+            if 'price' not in col_map or 'time' not in col_map:
+                issues.append("필수 컬럼(체결시각 또는 체결가) 누락")
+        except Exception as e:
+            issues.append(f"컬럼 매핑 실패: {e}")
+
+        # 3. Fast line count estimation
+        row_count = 0
+        try:
+            with open(file_path, "rb") as f:
+                row_count = sum(1 for _ in f) - 1
+            if row_count < 10:
+                issues.append(f"체결 틱 수 부족 ({row_count} 행)")
+        except Exception as e:
+            issues.append(f"행 개수 집계 오류: {e}")
+
+        is_valid = (len(issues) == 0)
+        return FileIntegrityResult(
+            file_path=str(file_path),
+            file_name=file_path.name,
+            date_str=date_str,
+            is_valid=is_valid,
+            file_size_bytes=file_size,
+            encoding_detected=chosen_enc,
+            row_count=max(0, row_count),
+            issues=issues,
+            sha256_hash=sha_str
+        )
+
+    def scan_all_files_with_integrity(self) -> Tuple[List[Tuple[str, Path]], DataSanitizeReport]:
+        """
+        Runs complete automated integrity verification over all files in data_dir.
+        Filters out corrupted files and builds comprehensive integrity report.
+        """
+        raw_files = self.scan_and_sort_files()
+        valid_files: List[Tuple[str, Path]] = []
+        integrity_results: List[FileIntegrityResult] = []
+
+        for dt_str, path in raw_files:
+            res = self.verify_file_integrity(path)
+            integrity_results.append(res)
+            if res.is_valid:
+                valid_files.append((dt_str, path))
+
+        corrupted_count = len(raw_files) - len(valid_files)
+        report = DataSanitizeReport(
+            total_files_scanned=len(raw_files),
+            valid_files_count=len(valid_files),
+            corrupted_files_count=corrupted_count,
+            total_raw_ticks=0,
+            total_cleaned_ticks=0,
+            integrity_results=integrity_results
+        )
+        return valid_files, report
+
     def clean_daily_ticks(
         self,
         file_path: Path,
@@ -203,14 +336,18 @@ class TickDataScanner:
             price_diff = df['price'].diff().fillna(0)
             df['side'] = np.where(price_diff > 0, 1, np.where(price_diff < 0, -1, 0))
 
-        # 4. Spike detection (abnormal filter: price > 500 or price < 50 for KOSPI futures)
+        # 4. Abnormal price detection (<= 0 or outside realistic bounds 50~600 for KOSPI futures)
+        zero_neg_mask = (df['price'] <= 0.0)
+        zero_neg_count = int(zero_neg_mask.sum())
         spike_mask = (df['price'] < 50.0) | (df['price'] > 600.0)
         spike_count = int(spike_mask.sum())
-        df = df[~spike_mask].copy()
+        df = df[~spike_mask & ~zero_neg_mask].copy()
 
         # 5. Chronological sort & duplicate detection
         # Korean HTS files often store ticks in reverse order (15:45:00 at top, 09:00:00 at bottom)
+        time_inversion_count = 0
         if len(df) > 1 and df['datetime'].iloc[0] > df['datetime'].iloc[-1]:
+            time_inversion_count = len(df)
             df = df.iloc[::-1].reset_index(drop=True)
 
         initial_len = len(df)
@@ -230,6 +367,13 @@ class TickDataScanner:
                 if "09:00:00" <= t_prev <= "15:30:00":
                     halts.append(f"{t_prev}~{t_curr}")
 
+        # Assess integrity status
+        status = "PASSED"
+        if spike_count > 0 or zero_neg_count > 0:
+            status = "WARNING"
+        if len(df) < 50:
+            status = "CORRUPTED"
+
         stats = DailyQualityStats(
             date_str=date_str,
             file_name=file_path.name,
@@ -238,7 +382,10 @@ class TickDataScanner:
             missing_count=missing_count,
             duplicate_count=dup_count,
             spike_count=spike_count,
-            halt_periods=halts
+            zero_or_negative_price_count=zero_neg_count,
+            time_inversion_count=time_inversion_count,
+            halt_periods=halts,
+            integrity_status=status
         )
 
         return df[['datetime', 'price', 'volume', 'side']], stats

@@ -1,3 +1,3 @@
-from .scanner import TickDataScanner, DataSanitizeReport, DailyQualityStats
+from .scanner import TickDataScanner, DataSanitizeReport, DailyQualityStats, FileIntegrityResult
 
-__all__ = ["TickDataScanner", "DataSanitizeReport", "DailyQualityStats"]
+__all__ = ["TickDataScanner", "DataSanitizeReport", "DailyQualityStats", "FileIntegrityResult"]

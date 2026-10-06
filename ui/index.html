@@ -6650,7 +6650,7 @@ ${kw.params}
             const infoText = document.getElementById('dl-folder-scan-text');
             if (infoDiv) {
                 infoDiv.style.display = 'flex';
-                infoText.innerText = '스캔 중...';
+                infoText.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 파일 무결성 및 인코딩 검사 중...';
             }
 
             try {
@@ -6662,9 +6662,12 @@ ${kw.params}
                 const data = await res.json();
                 if (infoDiv && infoText) {
                     if (data.status === 'success') {
-                        infoText.innerHTML = `<strong>${data.count.toLocaleString()}개</strong> CSV 확인 (${data.start_date} ~ ${data.end_date})`;
+                        const corruptedBadge = data.corrupted_count > 0 
+                            ? `<span style="color: #f43f5e; margin-left: 4px;">(비정상: ${data.corrupted_count}개 제외)</span>` 
+                            : `<span style="color: #10b981; margin-left: 4px;">(전체 100% 무결성 통과)</span>`;
+                        infoText.innerHTML = `<strong>${data.count.toLocaleString()}개</strong> CSV 검증 완료 (${data.start_date} ~ ${data.end_date}) ${corruptedBadge}`;
                         infoDiv.style.color = 'var(--accent-cyan)';
-                        showToast(`데이터 스캔 완료: ${data.count}개 파일`, "fa-check");
+                        showToast(`무결성 검사 완료: ${data.count}개 유효 파일 확인`, "fa-shield-halved");
                     } else {
                         infoText.innerText = data.message || 'CSV 파일 없음';
                         infoDiv.style.color = '#f43f5e';
@@ -6672,7 +6675,7 @@ ${kw.params}
                     }
                 }
             } catch (e) {
-                if (infoText) infoText.innerText = '스캔 실패: ' + e;
+                if (infoText) infoText.innerText = '무결성 검사 실패: ' + e;
             }
         }
 
