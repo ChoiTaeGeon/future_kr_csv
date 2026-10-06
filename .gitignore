@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+venv/
+env/
+
+# Build and Executables
+build/
+dist/
+output/
+
+# Databases & Cache
+*.duckdb*
+*.wal
+data/cache/
+data/market_data.duckdb*
+data/kiwoom_credentials.json
+
+# Large Market Data Files (>100MB)
+csv/
+csv_nq/
+csv_backup_isolated/
+cdt_code/
+*.cdt
+*.csv
+output/reports/*.pdf
+output/charts/*.html
+output/logs/*.log
+scratch/
