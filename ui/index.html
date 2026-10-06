@@ -4137,35 +4137,101 @@ ${kw.params}
             previewOverseasChart();
         }
 
-        function browseOverseasFolder() {
+        async function browseOverseasFolder() {
+            const btn = event?.currentTarget;
+            const origHtml = btn ? btn.innerHTML : '';
             const curVal = document.getElementById('overseas-cdt-source')?.value?.trim() || '';
-            openFsModal({
-                mode: 'folder',
-                title: '해외선물 CDT / CSV 틱데이터 폴더 선택',
-                initialDir: curVal,
-                onSelect: async (selectedFolder) => {
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 탐색기...';
+            }
+            showToast("윈도우 폴더 탐색기 창이 열렸습니다. CDT 폴더를 선택하세요.", "fa-folder-open");
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+            try {
+                const res = await fetch('/api/overseas/browse-folder', { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
+                const data = await res.json();
+                if (data.status === 'success' && data.folder) {
                     const input = document.getElementById('overseas-cdt-source');
-                    if (input) input.value = selectedFolder;
-                    showToast(`선택 완료: ${selectedFolder}`, "fa-circle-check");
+                    if (input) input.value = data.folder;
+                    showToast(`선택 완료: ${data.folder}`, "fa-circle-check");
                     await loadOverseasCDT();
+                    return;
+                } else if (data.status === 'cancelled') {
+                    showToast("폴더 선택이 취소되었습니다.", "fa-info");
+                    return;
                 }
-            });
+            } catch (e) {
+                clearTimeout(timeoutId);
+                console.warn("Native overseas browse-folder failed, fallback to in-browser explorer:", e);
+                openFsModal({
+                    mode: 'folder',
+                    title: '해외선물 CDT / CSV 틱데이터 폴더 선택 (내장 탐색기)',
+                    initialDir: curVal,
+                    onSelect: async (selectedFolder) => {
+                        const input = document.getElementById('overseas-cdt-source');
+                        if (input) input.value = selectedFolder;
+                        showToast(`선택 완료: ${selectedFolder}`, "fa-circle-check");
+                        await loadOverseasCDT();
+                    }
+                });
+            } finally {
+                if (btn && origHtml) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                }
+            }
         }
 
-        function browseOverseasFiles() {
+        async function browseOverseasFiles() {
+            const btn = event?.currentTarget;
+            const origHtml = btn ? btn.innerHTML : '';
             const curVal = document.getElementById('overseas-cdt-source')?.value?.trim() || '';
-            openFsModal({
-                mode: 'files',
-                title: '해외선물 CDT / CSV 파일 선택 (복수 선택 가능)',
-                initialDir: curVal,
-                onSelect: async (selectedFiles) => {
-                    const filesStr = selectedFiles.join(';');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 탐색기...';
+            }
+            showToast("윈도우 파일 탐색기 창이 열렸습니다. CDT/CSV 파일을 선택하세요.", "fa-file-lines");
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+            try {
+                const res = await fetch('/api/overseas/browse-files', { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
+                const data = await res.json();
+                if (data.status === 'success' && data.files_str) {
                     const input = document.getElementById('overseas-cdt-source');
-                    if (input) input.value = filesStr;
-                    showToast(`선택 완료: ${selectedFiles.length}개 파일 (CDT/CSV)`, "fa-circle-check");
+                    if (input) input.value = data.files_str;
+                    showToast(`선택 완료: ${data.count}개 파일 (CDT/CSV)`, "fa-circle-check");
                     await loadOverseasCDT();
+                    return;
+                } else if (data.status === 'cancelled') {
+                    showToast("파일 선택이 취소되었습니다.", "fa-info");
+                    return;
                 }
-            });
+            } catch (e) {
+                clearTimeout(timeoutId);
+                console.warn("Native overseas browse-files failed, fallback to in-browser explorer:", e);
+                openFsModal({
+                    mode: 'files',
+                    title: '해외선물 CDT / CSV 파일 선택 (내장 탐색기)',
+                    initialDir: curVal,
+                    onSelect: async (selectedFiles) => {
+                        const filesStr = selectedFiles.join(';');
+                        const input = document.getElementById('overseas-cdt-source');
+                        if (input) input.value = filesStr;
+                        showToast(`선택 완료: ${selectedFiles.length}개 파일 (CDT/CSV)`, "fa-circle-check");
+                        await loadOverseasCDT();
+                    }
+                });
+            } finally {
+                if (btn && origHtml) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                }
+            }
         }
 
         async function loadOverseasCDT() {
@@ -4574,37 +4640,105 @@ ${kw.params}
             }
         }
 
-        function browseFolder() {
+        async function browseFolder() {
+            const btn = event?.currentTarget;
+            const origHtml = btn ? btn.innerHTML : '';
             const curVal = document.getElementById('csv-folder')?.value?.trim() || '';
-            openFsModal({
-                mode: 'folder',
-                title: '국내선물 CSV 틱데이터 폴더 선택',
-                initialDir: curVal,
-                onSelect: (selectedFolder) => {
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 탐색기...';
+            }
+            showToast("윈도우 폴더 탐색기 창이 열렸습니다. 폴더를 선택하세요.", "fa-folder-open");
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+            try {
+                const res = await fetch('/api/browse-folder', { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
+                const data = await res.json();
+                if (data.status === 'success' && data.folder) {
                     const input = document.getElementById('csv-folder');
-                    if (input) input.value = selectedFolder;
-                    saveFolderLocally(selectedFolder);
-                    showToast(`폴더 선택 완료: ${selectedFolder}`, "fa-circle-check");
+                    if (input) input.value = data.folder;
+                    saveFolderLocally(data.folder);
+                    showToast(`선택 완료: ${data.folder}`, "fa-circle-check");
                     syncCSVData();
+                    return;
+                } else if (data.status === 'cancelled') {
+                    showToast("폴더 선택이 취소되었습니다.", "fa-info");
+                    return;
                 }
-            });
+            } catch (e) {
+                clearTimeout(timeoutId);
+                console.warn("Native browse-folder failed, fallback to in-browser explorer:", e);
+                openFsModal({
+                    mode: 'folder',
+                    title: '국내선물 CSV 틱데이터 폴더 선택 (내장 탐색기)',
+                    initialDir: curVal,
+                    onSelect: (selectedFolder) => {
+                        const input = document.getElementById('csv-folder');
+                        if (input) input.value = selectedFolder;
+                        saveFolderLocally(selectedFolder);
+                        showToast(`선택 완료: ${selectedFolder}`, "fa-circle-check");
+                        syncCSVData();
+                    }
+                });
+            } finally {
+                if (btn && origHtml) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                }
+            }
         }
 
-        function browseFiles() {
+        async function browseFiles() {
+            const btn = event?.currentTarget;
+            const origHtml = btn ? btn.innerHTML : '';
             const curVal = document.getElementById('csv-folder')?.value?.trim() || '';
-            openFsModal({
-                mode: 'files',
-                title: '국내선물 개별 CSV 파일 선택 (복수 선택 가능)',
-                initialDir: curVal,
-                onSelect: (selectedFiles) => {
-                    const filesStr = selectedFiles.join(';');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 탐색기...';
+            }
+            showToast("윈도우 파일 탐색기 창이 열렸습니다. CSV 파일을 선택하세요.", "fa-file-csv");
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+            try {
+                const res = await fetch('/api/browse-files', { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
+                const data = await res.json();
+                if (data.status === 'success' && data.files_str) {
                     const input = document.getElementById('csv-folder');
-                    if (input) input.value = filesStr;
-                    saveFolderLocally(filesStr);
-                    showToast(`선택 완료: ${selectedFiles.length}개 CSV 파일`, "fa-circle-check");
+                    if (input) input.value = data.files_str;
+                    saveFolderLocally(data.files_str);
+                    showToast(`선택 완료: ${data.count}개 CSV 파일`, "fa-circle-check");
                     syncCSVData();
+                    return;
+                } else if (data.status === 'cancelled') {
+                    showToast("파일 선택이 취소되었습니다.", "fa-info");
+                    return;
                 }
-            });
+            } catch (e) {
+                clearTimeout(timeoutId);
+                console.warn("Native browse-files failed, fallback to in-browser explorer:", e);
+                openFsModal({
+                    mode: 'files',
+                    title: '국내선물 개별 CSV 파일 선택 (내장 탐색기)',
+                    initialDir: curVal,
+                    onSelect: (selectedFiles) => {
+                        const filesStr = selectedFiles.join(';');
+                        const input = document.getElementById('csv-folder');
+                        if (input) input.value = filesStr;
+                        saveFolderLocally(filesStr);
+                        showToast(`선택 완료: ${selectedFiles.length}개 CSV 파일`, "fa-circle-check");
+                        syncCSVData();
+                    }
+                });
+            } finally {
+                if (btn && origHtml) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                }
+            }
         }
 
         async function convertTargetToCDT() {
@@ -6908,21 +7042,56 @@ ${kw.params}
             await scanDlDataFolder();
         }
 
-        function browseDlFolder() {
+        async function browseDlFolder() {
+            const btn = document.getElementById('dl-btn-browse-folder');
+            const origHtml = btn ? btn.innerHTML : '';
             const curVal = document.getElementById('dl-csv-folder')?.value?.trim() || '';
-            openFsModal({
-                mode: 'folder',
-                title: '코스피200선물 딥러닝 틱데이터 CSV 폴더 선택',
-                initialDir: curVal,
-                onSelect: async (selectedFolder) => {
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 탐색기...';
+            }
+            showToast("윈도우 폴더 탐색기 창이 열렸습니다. 폴더를 선택하세요.", "fa-folder-open");
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+            try {
+                const res = await fetch('/api/dl/browse-folder', { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
+                const data = await res.json();
+                if (data.status === 'success' && data.folder) {
                     const folderInput = document.getElementById('dl-csv-folder');
-                    if (folderInput) folderInput.value = selectedFolder;
-                    localStorage.setItem('dl_csv_folder', selectedFolder);
-                    showToast(`폴더 영구 저장 완료: ${selectedFolder}`, "fa-circle-check");
+                    if (folderInput) folderInput.value = data.folder;
+                    localStorage.setItem('dl_csv_folder', data.folder);
+                    showToast(`폴더 영구 저장 완료: ${data.folder}`, "fa-circle-check");
                     await scanDlDataFolder();
                     await saveDlConfig();
+                    return;
+                } else if (data.status === 'cancelled') {
+                    showToast("폴더 선택이 취소되었습니다.", "fa-xmark");
+                    return;
                 }
-            });
+            } catch (e) {
+                clearTimeout(timeoutId);
+                console.warn("Native dl browse-folder failed, fallback to in-browser explorer:", e);
+                openFsModal({
+                    mode: 'folder',
+                    title: '코스피200선물 딥러닝 틱데이터 CSV 폴더 선택 (내장 탐색기)',
+                    initialDir: curVal,
+                    onSelect: async (selectedFolder) => {
+                        const folderInput = document.getElementById('dl-csv-folder');
+                        if (folderInput) folderInput.value = selectedFolder;
+                        localStorage.setItem('dl_csv_folder', selectedFolder);
+                        showToast(`폴더 영구 저장 완료: ${selectedFolder}`, "fa-circle-check");
+                        await scanDlDataFolder();
+                        await saveDlConfig();
+                    }
+                });
+            } finally {
+                if (btn && origHtml) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                }
+            }
         }
 
         async function scanDlDataFolder() {
