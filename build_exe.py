@@ -13,10 +13,9 @@ BASE_DIR = Path(__file__).resolve().parent
 ENTRY_POINT = BASE_DIR / "main.py"
 EXE_NAME = "QuantTerminal"
 
-# Modules to exclude for size optimization
+# Modules to exclude for size optimization (heavy unused dev/gui toolkits)
 EXCLUDES = [
-    # GUI & Toolkits (Heavy!)
-    "tkinter", "tcl", "Tkinter", "_tkinter",
+    # Heavy unused GUI Toolkits
     "PySide6", "shiboken6", "PyQt5", "PyQt6", "PySide2", "wx", "gtk", "curses",
     # Dev & Doc tools & Notebooks
     "IPython", "jupyter", "notebook", "sphinx", "pytest", "pydoc", "pdb",
@@ -70,7 +69,12 @@ def build():
         "engine.cdt_converter",
         "engine.overseas_engine",
         "engine.kiwoom_manager",
+        "engine.native_dialog",
         "engine.logger",
+        "deep_learning",
+        "deep_learning.config_loader",
+        "tkinter",
+        "tkinter.filedialog",
         "config"
     ]
     for hi in hidden_imports:
@@ -82,6 +86,9 @@ def build():
     engine_dir = BASE_DIR / "engine"
     if engine_dir.exists():
         cmd.extend(["--add-data", f"{engine_dir};engine"])
+    configs_dir = BASE_DIR / "configs"
+    if configs_dir.exists():
+        cmd.extend(["--add-data", f"{configs_dir};configs"])
 
     cmd.append(str(ENTRY_POINT))
 
@@ -105,6 +112,12 @@ def build():
     settings_src = BASE_DIR / "data" / "settings.json"
     if settings_src.exists():
         shutil.copy2(settings_src, dist_data_dir / "settings.json")
+
+    dist_configs_dir = BASE_DIR / "dist" / "configs"
+    dist_configs_dir.mkdir(parents=True, exist_ok=True)
+    config_src = BASE_DIR / "configs" / "config.yaml"
+    if config_src.exists():
+        shutil.copy2(config_src, dist_configs_dir / "config.yaml")
 
     exe_path = BASE_DIR / "dist" / f"{EXE_NAME}.exe"
     if exe_path.exists():
