@@ -160,6 +160,10 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
                 self._handle_kiwoom_toggle_streaming(body)
             elif path == '/api/dl/save-config':
                 self._handle_dl_save_config(body)
+            elif path == '/api/dl/browse-folder':
+                self._handle_dl_browse_folder()
+            elif path == '/api/dl/scan-folder':
+                self._handle_dl_scan_folder(body)
             elif path == '/api/dl/start':
                 self._handle_dl_start_pipeline(body)
             elif path == '/api/dl/stop':
@@ -1265,6 +1269,72 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
         self._set_json_headers(200)
         self._safe_write(json.dumps({"status": "success", "message": "설정이 성공적으로 저장되었습니다."}, ensure_ascii=False).encode('utf-8'))
 
+    def _handle_dl_browse_folder(self):
+        """Native Windows FolderBrowserDialog for Deep Learning data_dir."""
+        import subprocess
+        import base64
+
+        cmd = [
+            "powershell", "-NoProfile", "-Command",
+            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+            "Add-Type -AssemblyName System.Windows.Forms; "
+            "$top = New-Object System.Windows.Forms.Form; "
+            "$top.TopMost = $true; "
+            "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
+            "$f.Description = 'Select Tick CSV Folder for Deep Learning (딥러닝 틱데이터 CSV 폴더 선택)'; "
+            "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) { "
+            "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($f.SelectedPath); "
+            "    [System.Convert]::ToBase64String($bytes) "
+            "}"
+        ]
+        flags = 0x08000000 if sys.platform == 'win32' else 0
+        try:
+            raw_out = subprocess.check_output(cmd, creationflags=flags).decode('ascii', errors='ignore').strip()
+            if raw_out:
+                folder_str = base64.b64decode(raw_out).decode('utf-8', errors='replace').strip()
+                if folder_str:
+                    self._set_json_headers(200)
+                    self._safe_write(json.dumps({"status": "success", "folder": folder_str}, ensure_ascii=False).encode('utf-8'))
+                    return
+        except Exception as e:
+            log_error("Error opening FolderBrowserDialog for DL", exc=e)
+
+        self._set_json_headers(200)
+        self._safe_write(json.dumps({"status": "cancelled", "folder": None}).encode('utf-8'))
+
+    def _handle_dl_scan_folder(self, body: dict):
+        """Scans the specified data_dir using TickDataScanner and returns file count and date range."""
+        folder = body.get("folder", "csv")
+        try:
+            from deep_learning.data_loader import TickDataScanner
+            scanner = TickDataScanner(data_dir=folder)
+            files = scanner.scan_and_sort_files()
+            if not files:
+                self._set_json_headers(200)
+                self._safe_write(json.dumps({
+                    "status": "empty",
+                    "count": 0,
+                    "message": f"폴더 '{folder}'에서 유효한 틱데이터 CSV 파일을 찾을 수 없습니다."
+                }, ensure_ascii=False).encode('utf-8'))
+                return
+
+            start_dt = files[0][0]
+            end_dt = files[-1][0]
+            self._set_json_headers(200)
+            self._safe_write(json.dumps({
+                "status": "success",
+                "count": len(files),
+                "start_date": start_dt,
+                "end_date": end_dt,
+                "message": f"총 {len(files):,}개 CSV 파일 확인됨 ({start_dt} ~ {end_dt})"
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self._set_json_headers(200)
+            self._safe_write(json.dumps({
+                "status": "error",
+                "message": f"폴더 스캔 오류: {e}"
+            }, ensure_ascii=False).encode('utf-8'))
+
     def _handle_dl_progress(self):
         # Read latest progress or log file
         from config import BASE_DIR
@@ -1300,6 +1370,8 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
         script_path = BASE_DIR / "main_pipeline.py"
         flags = 0x08000000 if sys.platform == 'win32' else 0
         cmd = [sys.executable, str(script_path)]
+        if body.get("data_dir"):
+            cmd.extend(["--data-dir", str(body["data_dir"])])
         if body.get("max_days"):
             cmd.extend(["--max-days", str(body["max_days"])])
         

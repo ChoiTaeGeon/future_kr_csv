@@ -1368,6 +1368,30 @@
             <div id="sidebar-dl-container" style="display: none; flex-direction: column; gap: 14px;">
                 <div class="step-card">
                     <div class="step-header">
+                        <span class="step-badge" style="background: rgba(168,85,247,0.2); color: #c084fc;">DL 0</span>
+                        <span class="step-title">틱데이터 CSV 폴더 지정</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <div class="input-group" style="margin-bottom: 4px;">
+                            <label class="input-label" style="font-size: 0.72rem; color: var(--text-dim);">데이터 폴더 (data_dir)</label>
+                            <input type="text" id="dl-csv-folder" class="input-field" value="csv" placeholder="폴더 경로 (예: csv, D:/ticks)" onchange="saveDlFolderLocally(this.value)">
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="btn btn-secondary" onclick="browseDlFolder()" style="flex: 1; padding: 6px; font-size: 0.76rem; justify-content: center;" title="윈도우 탐색기로 CSV 폴더 선택">
+                                <i class="fa-solid fa-folder-open" style="color: var(--accent-cyan);"></i> 폴더 선택
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="scanDlDataFolder()" style="flex: 1; padding: 6px; font-size: 0.76rem; justify-content: center;" title="폴더 내 CSV 유효성 스캔">
+                                <i class="fa-solid fa-magnifying-glass" style="color: #c084fc;"></i> 폴더 스캔
+                            </button>
+                        </div>
+                        <div id="dl-folder-scan-info" style="font-size: 0.7rem; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; display: none;">
+                            <i class="fa-solid fa-circle-check"></i> <span id="dl-folder-scan-text">스캔 완료</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-header">
                         <span class="step-badge" style="background: rgba(168,85,247,0.2); color: #c084fc;">DL 1</span>
                         <span class="step-title">동적 틱 주기 윈도우 설정</span>
                     </div>
@@ -6582,10 +6606,16 @@ ${kw.params}
             try {
                 const res = await fetch('/api/dl/config');
                 const cfg = await res.json();
-                if (cfg && cfg.tick_window) {
-                    document.getElementById('dl-tick-start').value = cfg.tick_window.start || 100;
-                    document.getElementById('dl-tick-end').value = cfg.tick_window.end || 1000;
-                    document.getElementById('dl-tick-step').value = cfg.tick_window.step || 10;
+                if (cfg) {
+                    if (cfg.data_dir) {
+                        const folderInput = document.getElementById('dl-csv-folder');
+                        if (folderInput) folderInput.value = cfg.data_dir;
+                    }
+                    if (cfg.tick_window) {
+                        document.getElementById('dl-tick-start').value = cfg.tick_window.start || 100;
+                        document.getElementById('dl-tick-end').value = cfg.tick_window.end || 1000;
+                        document.getElementById('dl-tick-step').value = cfg.tick_window.step || 10;
+                    }
                     if (cfg.coarse_to_fine) {
                         document.getElementById('dl-coarse-to-fine').checked = !!cfg.coarse_to_fine.enabled;
                     }
@@ -6595,14 +6625,66 @@ ${kw.params}
             }
         }
 
+        function saveDlFolderLocally(folder) {
+            saveDlConfig();
+        }
+
+        async function browseDlFolder() {
+            try {
+                const res = await fetch('/api/dl/browse-folder', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success' && data.folder) {
+                    document.getElementById('dl-csv-folder').value = data.folder;
+                    showToast(`폴더 선택 완료: ${data.folder}`, "fa-folder-open");
+                    await scanDlDataFolder();
+                    await saveDlConfig();
+                }
+            } catch (e) {
+                showToast("폴더 탐색 오류: " + e, "fa-triangle-exclamation");
+            }
+        }
+
+        async function scanDlDataFolder() {
+            const folder = document.getElementById('dl-csv-folder').value.trim() || 'csv';
+            const infoDiv = document.getElementById('dl-folder-scan-info');
+            const infoText = document.getElementById('dl-folder-scan-text');
+            if (infoDiv) {
+                infoDiv.style.display = 'flex';
+                infoText.innerText = '스캔 중...';
+            }
+
+            try {
+                const res = await fetch('/api/dl/scan-folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: folder })
+                });
+                const data = await res.json();
+                if (infoDiv && infoText) {
+                    if (data.status === 'success') {
+                        infoText.innerHTML = `<strong>${data.count.toLocaleString()}개</strong> CSV 확인 (${data.start_date} ~ ${data.end_date})`;
+                        infoDiv.style.color = 'var(--accent-cyan)';
+                        showToast(`데이터 스캔 완료: ${data.count}개 파일`, "fa-check");
+                    } else {
+                        infoText.innerText = data.message || 'CSV 파일 없음';
+                        infoDiv.style.color = '#f43f5e';
+                        showToast(data.message, "fa-triangle-exclamation");
+                    }
+                }
+            } catch (e) {
+                if (infoText) infoText.innerText = '스캔 실패: ' + e;
+            }
+        }
+
         async function saveDlConfig() {
+            const folderVal = document.getElementById('dl-csv-folder').value.trim() || "csv";
             const startVal = parseInt(document.getElementById('dl-tick-start').value) || 100;
             const endVal = parseInt(document.getElementById('dl-tick-end').value) || 1000;
             const stepVal = parseInt(document.getElementById('dl-tick-step').value) || 10;
             const coarseVal = document.getElementById('dl-coarse-to-fine').checked;
 
             const payload = {
-                data_dir: "csv",
+                data_dir: folderVal,
                 symbol: "KOSPI_F",
                 cache_dir: "data/dl_cache",
                 tick_window: { start: startVal, end: endVal, step: stepVal },
@@ -6637,11 +6719,12 @@ ${kw.params}
 
         async function startDeepLearningPipeline() {
             await saveDlConfig();
+            const folderVal = document.getElementById('dl-csv-folder').value.trim() || "csv";
             try {
                 const res = await fetch('/api/dl/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ max_days: 5 })  // Fast demo execution on current CSVs
+                    body: JSON.stringify({ data_dir: folderVal, max_days: 5 })
                 });
                 const data = await res.json();
                 showToast("딥러닝 파이프라인 가동 시작!", "fa-microchip");
