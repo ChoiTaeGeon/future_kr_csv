@@ -151,6 +151,8 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
                 self._handle_dl_progress()
             elif path == '/api/dl/reports':
                 self._handle_dl_reports()
+            elif path == '/api/fs/explore':
+                self._handle_fs_explore(parsed)
             else:
                 self.send_error(404, "File Not Found")
         except Exception as e:
@@ -281,6 +283,89 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
         save_settings(body)
         self._set_json_headers(200)
         self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
+
+    def _handle_fs_explore(self, parsed):
+        """Web-based filesystem explorer API for selecting folders and files without OS popup blocking."""
+        import string
+        from urllib.parse import parse_qs
+        qs = parse_qs(parsed.query)
+        target_path = qs.get('path', [''])[0].strip()
+
+        try:
+            # If target_path is empty, list logical drive letters
+            if not target_path:
+                drives = []
+                for letter in string.ascii_uppercase:
+                    d_path = f"{letter}:\\"
+                    if os.path.exists(d_path):
+                        drives.append({
+                            "name": f"{letter}: 드라이브",
+                            "path": d_path,
+                            "is_dir": True,
+                            "is_drive": True
+                        })
+                # Add current workspace quick access
+                cwd = os.getcwd()
+                res = {
+                    "status": "success",
+                    "current": "",
+                    "parent": "",
+                    "cwd": cwd,
+                    "items": drives
+                }
+                self._set_json_headers(200)
+                self._safe_write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+                return
+
+            abs_path = os.path.abspath(target_path)
+            if not os.path.exists(abs_path):
+                abs_path = os.getcwd()
+
+            # Determine parent folder
+            drive_root = os.path.abspath(os.path.splitdrive(abs_path)[0] + "\\")
+            parent = os.path.dirname(abs_path) if abs_path != drive_root else ""
+
+            items = []
+            try:
+                with os.scandir(abs_path) as it:
+                    for entry in it:
+                        try:
+                            if entry.name.startswith('.'):
+                                continue
+                            if entry.is_dir(follow_symlinks=False):
+                                items.append({
+                                    "name": entry.name,
+                                    "path": entry.path,
+                                    "is_dir": True
+                                })
+                            elif entry.is_file(follow_symlinks=False):
+                                lower_name = entry.name.lower()
+                                if lower_name.endswith(('.csv', '.cdt', '.txt')):
+                                    items.append({
+                                        "name": entry.name,
+                                        "path": entry.path,
+                                        "is_dir": False,
+                                        "size": entry.stat().st_size
+                                    })
+                        except (PermissionError, OSError):
+                            continue
+            except PermissionError:
+                pass
+
+            items.sort(key=lambda x: (not x['is_dir'], x['name'].lower()))
+
+            res = {
+                "status": "success",
+                "current": abs_path,
+                "parent": parent,
+                "cwd": os.getcwd(),
+                "items": items
+            }
+            self._set_json_headers(200)
+            self._safe_write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self._set_json_headers(200)
+            self._safe_write(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False).encode('utf-8'))
 
     def _open_native_folder_dialog(self, title: str = "폴더를 선택하세요", initial_dir: str = ""):
         """Open native Windows folder selection dialog in foreground via engine.native_dialog."""

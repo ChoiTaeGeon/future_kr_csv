@@ -2397,10 +2397,288 @@
         </div>
     </div>
 
+    <!-- Universal File & Folder Explorer Modal (브라우저 내장 탐색기 모달) -->
+    <div id="fs-modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(5, 7, 15, 0.82); backdrop-filter: blur(8px); z-index: 99999; align-items: center; justify-content: center;">
+        <div style="background: #111827; border: 1px solid rgba(0, 242, 254, 0.35); border-radius: 14px; width: 90%; max-width: 780px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8); overflow: hidden;">
+            <!-- Modal Header -->
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: rgba(17, 24, 39, 0.95);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-folder-tree" style="color: var(--accent-cyan); font-size: 1.1rem;"></i>
+                    <span id="fs-modal-title" style="font-weight: 700; font-size: 0.95rem; color: #f3f4f6;">탐색기 (폴더/파일 선택)</span>
+                </div>
+                <button type="button" onclick="closeFsModal()" style="background: transparent; border: none; color: var(--text-dim); font-size: 1.1rem; cursor: pointer; padding: 4px 8px;" title="닫기">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Path Bar & Quick Navigation -->
+            <div style="padding: 10px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); background: rgba(31, 41, 55, 0.4); display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="btn btn-secondary" onclick="fsNavUp()" id="fs-btn-up" style="padding: 5px 10px; font-size: 0.76rem;" title="상위 폴더로 이동">
+                    <i class="fa-solid fa-arrow-up"></i> 상위
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="fsNavHome()" style="padding: 5px 10px; font-size: 0.76rem;" title="작업 폴더로 이동">
+                    <i class="fa-solid fa-house"></i> 현재 작업폴더
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="fsNavDrives()" style="padding: 5px 10px; font-size: 0.76rem;" title="드라이브 목록 보기">
+                    <i class="fa-solid fa-hard-drive"></i> 드라이브
+                </button>
+                <input type="text" id="fs-current-path-input" class="input-field" style="flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; padding: 4px 8px; background: rgba(0, 0, 0, 0.35);" onkeydown="if(event.key==='Enter') fsLoadPath(this.value)">
+                <button type="button" class="btn btn-secondary" onclick="fsLoadPath(document.getElementById('fs-current-path-input').value)" style="padding: 5px 10px; font-size: 0.76rem;">
+                    이동
+                </button>
+            </div>
+
+            <!-- Directory Items List -->
+            <div id="fs-items-container" style="flex: 1; overflow-y: auto; padding: 12px 18px; min-height: 280px; max-height: 420px; display: flex; flex-direction: column; gap: 4px;">
+                <!-- Populated dynamically via JS -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div style="padding: 12px 18px; border-top: 1px solid rgba(255, 255, 255, 0.08); background: rgba(17, 24, 39, 0.95); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                <div style="font-size: 0.74rem; color: var(--text-dim); display: flex; align-items: center; gap: 6px;">
+                    <span id="fs-selected-desc" style="color: var(--accent-cyan); font-weight: 600;">선택된 항목: 없음</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeFsModal()" style="padding: 6px 14px; font-size: 0.8rem;">취소</button>
+                    <button type="button" class="btn btn-primary" id="fs-btn-confirm" onclick="confirmFsSelection()" style="padding: 6px 18px; font-size: 0.8rem;">
+                        <i class="fa-solid fa-check"></i> 선택 완료
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notifications -->
     <div class="toast-container" id="toast-container"></div>
 
     <script>
+        // ==========================================
+        // Universal In-Browser File & Folder Explorer Logic
+        // ==========================================
+        let fsModalState = {
+            mode: 'folder', // 'folder' or 'files'
+            currentPath: '',
+            parentPath: '',
+            workspaceCwd: '',
+            selectedItem: null,
+            selectedFiles: [],
+            onSelectCallback: null
+        };
+
+        function openFsModal(options) {
+            fsModalState.mode = options.mode || 'folder';
+            fsModalState.selectedItem = null;
+            fsModalState.selectedFiles = [];
+            fsModalState.onSelectCallback = options.onSelect;
+
+            const modal = document.getElementById('fs-modal-overlay');
+            const titleEl = document.getElementById('fs-modal-title');
+            if (titleEl) {
+                titleEl.textContent = options.title || (fsModalState.mode === 'folder' ? '폴더 선택 탐색기' : '파일 선택 탐색기');
+            }
+            if (modal) {
+                modal.style.display = 'flex';
+            }
+            updateFsSelectedDesc();
+
+            // Initial path load
+            const initDir = options.initialDir || '';
+            fsLoadPath(initDir);
+        }
+
+        function closeFsModal() {
+            const modal = document.getElementById('fs-modal-overlay');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function fsLoadPath(targetPath) {
+            const container = document.getElementById('fs-items-container');
+            const pathInput = document.getElementById('fs-current-path-input');
+            const btnUp = document.getElementById('fs-btn-up');
+
+            if (container) {
+                container.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: center; height: 180px; color: var(--accent-cyan); font-size: 0.88rem; gap: 8px;">
+                        <i class="fa-solid fa-spinner fa-spin"></i> 디렉토리 조회 중...
+                    </div>
+                `;
+            }
+
+            try {
+                const url = '/api/fs/explore?path=' + encodeURIComponent(targetPath || '');
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.status !== 'success') {
+                    if (container) {
+                        container.innerHTML = `<div style="color: #ef4444; padding: 20px;">경로를 열 수 없습니다: ${data.message}</div>`;
+                    }
+                    return;
+                }
+
+                fsModalState.currentPath = data.current;
+                fsModalState.parentPath = data.parent;
+                fsModalState.workspaceCwd = data.cwd || '';
+
+                if (pathInput) pathInput.value = data.current;
+                if (btnUp) btnUp.disabled = !data.parent;
+
+                // When in folder mode, default selection is the current folder
+                if (fsModalState.mode === 'folder' && data.current) {
+                    fsModalState.selectedItem = data.current;
+                    updateFsSelectedDesc();
+                }
+
+                renderFsItems(data.items);
+            } catch (err) {
+                if (container) {
+                    container.innerHTML = `<div style="color: #ef4444; padding: 20px;">네트워크 오류: ${err}</div>`;
+                }
+            }
+        }
+
+        function renderFsItems(items) {
+            const container = document.getElementById('fs-items-container');
+            if (!container) return;
+
+            if (!items || items.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: var(--text-dim); padding: 40px; font-size: 0.82rem;">
+                        <i class="fa-regular fa-folder-open" style="font-size: 1.6rem; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
+                        표시할 폴더나 파일이 없습니다.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            items.forEach(item => {
+                const isDir = item.is_dir;
+                const icon = item.is_drive ? 'fa-hard-drive' : (isDir ? 'fa-folder' : 'fa-file-lines');
+                const iconColor = item.is_drive ? 'var(--accent-amber)' : (isDir ? 'var(--accent-cyan)' : 'var(--accent-emerald)');
+                const isSelected = (fsModalState.mode === 'folder' && fsModalState.selectedItem === item.path) ||
+                                   (fsModalState.mode === 'files' && fsModalState.selectedFiles.includes(item.path));
+
+                const bgStyle = isSelected ? 'background: rgba(0, 242, 254, 0.16); border-color: rgba(0, 242, 254, 0.5);' : 'background: rgba(255, 255, 255, 0.03); border-color: transparent;';
+
+                const escPath = item.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const escName = item.name.replace(/'/g, "\\'");
+
+                html += `
+                    <div class="fs-item-row" onclick="onFsItemClick('${escPath}', ${isDir})" ondblclick="onFsItemDblClick('${escPath}', ${isDir})"
+                         style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; user-select: none; transition: all 0.15s; ${bgStyle}">
+                        <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                            <i class="fa-solid ${icon}" style="color: ${iconColor}; font-size: 0.95rem; width: 18px; text-align: center;"></i>
+                            <span style="font-size: 0.8rem; color: #f3f4f6; font-family: ${isDir ? 'inherit' : "'JetBrains Mono', monospace"};">${item.name}</span>
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--text-dim); display: flex; align-items: center; gap: 8px;">
+                            ${isDir ? '<span style="color: var(--accent-cyan); font-size: 0.68rem; padding: 2px 6px; background: rgba(0,242,254,0.1); border-radius: 4px;">폴더</span>' : (item.size !== undefined ? '<span>' + formatBytes(item.size) + '</span>' : '')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function onFsItemClick(path, isDir) {
+            if (fsModalState.mode === 'folder') {
+                fsModalState.selectedItem = path;
+                updateFsSelectedDesc();
+                // re-highlight rows
+                highlightFsSelection();
+            } else {
+                if (!isDir) {
+                    const idx = fsModalState.selectedFiles.indexOf(path);
+                    if (idx >= 0) {
+                        fsModalState.selectedFiles.splice(idx, 1);
+                    } else {
+                        fsModalState.selectedFiles.push(path);
+                    }
+                    updateFsSelectedDesc();
+                    highlightFsSelection();
+                }
+            }
+        }
+
+        function onFsItemDblClick(path, isDir) {
+            if (isDir) {
+                fsLoadPath(path);
+            } else if (fsModalState.mode === 'files') {
+                if (!fsModalState.selectedFiles.includes(path)) {
+                    fsModalState.selectedFiles.push(path);
+                }
+                confirmFsSelection();
+            }
+        }
+
+        function fsNavUp() {
+            if (fsModalState.parentPath) {
+                fsLoadPath(fsModalState.parentPath);
+            }
+        }
+
+        function fsNavHome() {
+            fsLoadPath(fsModalState.workspaceCwd || '.');
+        }
+
+        function fsNavDrives() {
+            fsLoadPath('');
+        }
+
+        function updateFsSelectedDesc() {
+            const descEl = document.getElementById('fs-selected-desc');
+            if (!descEl) return;
+            if (fsModalState.mode === 'folder') {
+                const sel = fsModalState.selectedItem || fsModalState.currentPath || '현재 위치 미선택';
+                descEl.innerHTML = `<i class="fa-solid fa-folder-check"></i> 선택 폴더: <span style="color: #fff; font-family: 'JetBrains Mono', monospace;">${sel}</span>`;
+            } else {
+                const count = fsModalState.selectedFiles.length;
+                descEl.innerHTML = `<i class="fa-solid fa-file-check"></i> 선택 파일: <span style="color: #fff; font-weight: 700;">${count}개</span>`;
+            }
+        }
+
+        function highlightFsSelection() {
+            const rows = document.querySelectorAll('.fs-item-row');
+            rows.forEach(r => {
+                r.style.background = 'rgba(255, 255, 255, 0.03)';
+                r.style.borderColor = 'transparent';
+            });
+            // highlight the selected one
+            updateFsSelectedDesc();
+        }
+
+        function confirmFsSelection() {
+            if (fsModalState.mode === 'folder') {
+                const finalPath = fsModalState.selectedItem || fsModalState.currentPath;
+                if (!finalPath) {
+                    showToast("선택된 폴더가 없습니다.", "fa-circle-exclamation");
+                    return;
+                }
+                closeFsModal();
+                if (typeof fsModalState.onSelectCallback === 'function') {
+                    fsModalState.onSelectCallback(finalPath);
+                }
+            } else {
+                if (!fsModalState.selectedFiles || fsModalState.selectedFiles.length === 0) {
+                    showToast("선택된 파일이 없습니다.", "fa-circle-exclamation");
+                    return;
+                }
+                closeFsModal();
+                if (typeof fsModalState.onSelectCallback === 'function') {
+                    fsModalState.onSelectCallback(fsModalState.selectedFiles);
+                }
+            }
+        }
+
         const STRATEGY_DATA = {
             Contrarian: [
                 "Contrarian_BB_LargeBar",
@@ -3859,46 +4137,35 @@ ${kw.params}
             previewOverseasChart();
         }
 
-        async function browseOverseasFolder() {
-            showToast("폴더 탐색기 여는 중...", "fa-folder-open");
-            setChartLoader(true, "폴더 탐색기 대기 중... CDT 폴더를 선택하세요.");
-            try {
-                const res = await fetch('/api/overseas/browse-folder', { method: 'POST' });
-                const data = await res.json();
-                if (data.status === 'success' && data.folder) {
-                    document.getElementById('overseas-cdt-source').value = data.folder;
-                    showToast(`선택 완료: ${data.folder}`, "fa-circle-check");
-                    setChartLoader(false);
+        function browseOverseasFolder() {
+            const curVal = document.getElementById('overseas-cdt-source')?.value?.trim() || '';
+            openFsModal({
+                mode: 'folder',
+                title: '해외선물 CDT / CSV 틱데이터 폴더 선택',
+                initialDir: curVal,
+                onSelect: async (selectedFolder) => {
+                    const input = document.getElementById('overseas-cdt-source');
+                    if (input) input.value = selectedFolder;
+                    showToast(`선택 완료: ${selectedFolder}`, "fa-circle-check");
                     await loadOverseasCDT();
-                } else if (data.status === 'cancelled') {
-                    showToast("폴더 선택이 취소되었습니다.", "fa-info");
                 }
-            } catch (e) {
-                showToast("폴더 탐색기 에러", "fa-triangle-exclamation");
-            } finally {
-                setChartLoader(false);
-            }
+            });
         }
 
-        async function browseOverseasFiles() {
-            showToast("파일 탐색기 여는 중 (CDT / CSV 파일 선택)...", "fa-file-lines");
-            setChartLoader(true, "파일 탐색기 대기 중... 대상 CDT 또는 CSV 파일(들)을 선택하세요.");
-            try {
-                const res = await fetch('/api/overseas/browse-files', { method: 'POST' });
-                const data = await res.json();
-                if (data.status === 'success' && data.files_str) {
-                    document.getElementById('overseas-cdt-source').value = data.files_str;
-                    showToast(`선택 완료: ${data.count}개 파일 (CDT/CSV)`, "fa-circle-check");
-                    setChartLoader(false);
+        function browseOverseasFiles() {
+            const curVal = document.getElementById('overseas-cdt-source')?.value?.trim() || '';
+            openFsModal({
+                mode: 'files',
+                title: '해외선물 CDT / CSV 파일 선택 (복수 선택 가능)',
+                initialDir: curVal,
+                onSelect: async (selectedFiles) => {
+                    const filesStr = selectedFiles.join(';');
+                    const input = document.getElementById('overseas-cdt-source');
+                    if (input) input.value = filesStr;
+                    showToast(`선택 완료: ${selectedFiles.length}개 파일 (CDT/CSV)`, "fa-circle-check");
                     await loadOverseasCDT();
-                } else if (data.status === 'cancelled') {
-                    showToast("파일 선택이 취소되었습니다.", "fa-info");
                 }
-            } catch (e) {
-                showToast("파일 탐색기 에러", "fa-triangle-exclamation");
-            } finally {
-                setChartLoader(false);
-            }
+            });
         }
 
         async function loadOverseasCDT() {
@@ -4307,64 +4574,37 @@ ${kw.params}
             }
         }
 
-        async function browseFolder() {
-            showToast("폴더 탐색기 여는 중...", "fa-folder-open");
-            setChartLoader(true, "폴더 탐색기 대기 중... 대상 폴더를 선택하세요.");
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000);
-            try {
-                const res = await fetch('/api/browse-folder', { method: 'POST', signal: controller.signal });
-                clearTimeout(timeoutId);
-                const data = await res.json();
-                if (data.status === 'success' && data.folder) {
-                    document.getElementById('csv-folder').value = data.folder;
-                    saveFolderLocally(data.folder);
-                    showToast(`선택 완료: ${data.folder}`, "fa-circle-check");
-                    setChartLoader(false);
+        function browseFolder() {
+            const curVal = document.getElementById('csv-folder')?.value?.trim() || '';
+            openFsModal({
+                mode: 'folder',
+                title: '국내선물 CSV 틱데이터 폴더 선택',
+                initialDir: curVal,
+                onSelect: (selectedFolder) => {
+                    const input = document.getElementById('csv-folder');
+                    if (input) input.value = selectedFolder;
+                    saveFolderLocally(selectedFolder);
+                    showToast(`폴더 선택 완료: ${selectedFolder}`, "fa-circle-check");
                     syncCSVData();
-                } else if (data.status === 'cancelled') {
-                    showToast("폴더 선택이 취소되었습니다.", "fa-info");
                 }
-            } catch (e) {
-                clearTimeout(timeoutId);
-                if (e.name === 'AbortError') {
-                    showToast("폴더 탐색기 응답 시간이 초과되었습니다.", "fa-triangle-exclamation");
-                } else {
-                    showToast("폴더 탐색기 에러", "fa-triangle-exclamation");
-                }
-            } finally {
-                setChartLoader(false);
-            }
+            });
         }
 
-        async function browseFiles() {
-            showToast("파일 탐색기 여는 중 (단일/복수 CSV 선택)...", "fa-file-csv");
-            setChartLoader(true, "파일 탐색기 대기 중... 대상 CSV 파일(들)을 선택하세요.");
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000);
-            try {
-                const res = await fetch('/api/browse-files', { method: 'POST', signal: controller.signal });
-                clearTimeout(timeoutId);
-                const data = await res.json();
-                if (data.status === 'success' && data.files_str) {
-                    document.getElementById('csv-folder').value = data.files_str;
-                    saveFolderLocally(data.files_str);
-                    showToast(`선택 완료: ${data.count}개 CSV 파일`, "fa-circle-check");
-                    setChartLoader(false);
+        function browseFiles() {
+            const curVal = document.getElementById('csv-folder')?.value?.trim() || '';
+            openFsModal({
+                mode: 'files',
+                title: '국내선물 개별 CSV 파일 선택 (복수 선택 가능)',
+                initialDir: curVal,
+                onSelect: (selectedFiles) => {
+                    const filesStr = selectedFiles.join(';');
+                    const input = document.getElementById('csv-folder');
+                    if (input) input.value = filesStr;
+                    saveFolderLocally(filesStr);
+                    showToast(`선택 완료: ${selectedFiles.length}개 CSV 파일`, "fa-circle-check");
                     syncCSVData();
-                } else if (data.status === 'cancelled') {
-                    showToast("파일 선택이 취소되었습니다.", "fa-info");
                 }
-            } catch (e) {
-                clearTimeout(timeoutId);
-                if (e.name === 'AbortError') {
-                    showToast("파일 탐색기 응답 시간이 초과되었습니다.", "fa-triangle-exclamation");
-                } else {
-                    showToast("파일 탐색기 에러", "fa-triangle-exclamation");
-                }
-            } finally {
-                setChartLoader(false);
-            }
+            });
         }
 
         async function convertTargetToCDT() {
@@ -6668,43 +6908,21 @@ ${kw.params}
             await scanDlDataFolder();
         }
 
-        async function browseDlFolder() {
-            const btn = document.getElementById('dl-btn-browse-folder');
-            const origHtml = btn ? btn.innerHTML : '';
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000);
-            try {
-                if (btn) {
-                    btn.disabled = true;
-                    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 탐색기 열림...';
-                }
-                showToast("윈도우 폴더 탐색기 창이 열렸습니다. 폴더를 선택하세요.", "fa-folder-open");
-                const res = await fetch('/api/dl/browse-folder', { method: 'POST', signal: controller.signal });
-                clearTimeout(timeoutId);
-                const data = await res.json();
-                if (data.status === 'success' && data.folder) {
+        function browseDlFolder() {
+            const curVal = document.getElementById('dl-csv-folder')?.value?.trim() || '';
+            openFsModal({
+                mode: 'folder',
+                title: '코스피200선물 딥러닝 틱데이터 CSV 폴더 선택',
+                initialDir: curVal,
+                onSelect: async (selectedFolder) => {
                     const folderInput = document.getElementById('dl-csv-folder');
-                    if (folderInput) folderInput.value = data.folder;
-                    localStorage.setItem('dl_csv_folder', data.folder);
-                    showToast(`폴더 영구 저장 완료: ${data.folder}`, "fa-circle-check");
+                    if (folderInput) folderInput.value = selectedFolder;
+                    localStorage.setItem('dl_csv_folder', selectedFolder);
+                    showToast(`폴더 영구 저장 완료: ${selectedFolder}`, "fa-circle-check");
                     await scanDlDataFolder();
                     await saveDlConfig();
-                } else if (data.status === 'cancelled') {
-                    showToast("폴더 선택이 취소되었습니다.", "fa-xmark");
                 }
-            } catch (e) {
-                clearTimeout(timeoutId);
-                if (e.name === 'AbortError') {
-                    showToast("폴더 탐색기 응답 시간이 초과되었습니다.", "fa-triangle-exclamation");
-                } else {
-                    showToast("폴더 탐색 오류: " + e, "fa-triangle-exclamation");
-                }
-            } finally {
-                if (btn && origHtml) {
-                    btn.disabled = false;
-                    btn.innerHTML = origHtml;
-                }
-            }
+            });
         }
 
         async function scanDlDataFolder() {
