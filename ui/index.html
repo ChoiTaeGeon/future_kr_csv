@@ -781,9 +781,15 @@
 
                     <!-- Credentials Inputs -->
                     <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
-                        <div>
-                            <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">계좌번호 (선물/옵션)</label>
-                            <input type="text" id="kw-account-no" class="input-field" placeholder="예: 50123456-01" style="font-size: 0.8rem; padding: 6px 10px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <div>
+                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">아이디 (ID)</label>
+                                <input type="text" id="kw-user-id" class="input-field" placeholder="예: kthood79" style="font-size: 0.8rem; padding: 6px 10px;">
+                            </div>
+                            <div>
+                                <label class="input-label" style="font-size: 0.72rem; margin-bottom: 2px;">계좌번호 (선물)</label>
+                                <input type="text" id="kw-account-no" class="input-field" placeholder="예: 50123456-01" style="font-size: 0.8rem; padding: 6px 10px;">
+                            </div>
                         </div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
                             <div>
@@ -5484,8 +5490,10 @@ ${kw.params}
                         if (el2) el2.value = c.account_no;
                     }
                     if (c.user_id) {
-                        const el = document.getElementById('km-user-id');
-                        if (el) el.value = c.user_id;
+                        const el1 = document.getElementById('kw-user-id');
+                        const el2 = document.getElementById('km-user-id');
+                        if (el1) el1.value = c.user_id;
+                        if (el2) el2.value = c.user_id;
                     }
                     if (c.has_account_pw) {
                         const el1 = document.getElementById('kw-account-pw');
@@ -5569,6 +5577,7 @@ ${kw.params}
         }
 
         async function connectKiwoom() {
+            const userId = document.getElementById('kw-user-id')?.value.trim();
             const acctNo = document.getElementById('kw-account-no')?.value.trim();
             const acctPw = document.getElementById('kw-account-pw')?.value.trim();
             const certPw = document.getElementById('kw-cert-pw')?.value.trim();
@@ -5582,6 +5591,7 @@ ${kw.params}
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         server_type: currentKiwoomServer,
+                        user_id: userId,
                         account_no: acctNo,
                         account_pw: acctPw,
                         cert_pw: certPw,

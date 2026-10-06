@@ -98,8 +98,8 @@ def load_kiwoom_credentials(mask_passwords: bool = False) -> dict:
         result = dict(default_creds)
         result["has_account_pw"] = bool(result.get("account_pw"))
         result["has_cert_pw"] = bool(result.get("cert_pw"))
-        result["account_pw"] = "••••••••" if result["has_account_pw"] else ""
-        result["cert_pw"] = "••••••••" if result["has_cert_pw"] else ""
+        result["account_pw"] = "********" if result["has_account_pw"] else ""
+        result["cert_pw"] = "********" if result["has_cert_pw"] else ""
         return result
     return default_creds
 
@@ -115,14 +115,14 @@ def save_kiwoom_credentials(creds: dict):
         # Obfuscate passwords before writing
         raw_pw = data_to_save.get("account_pw", "")
         raw_cert = data_to_save.get("cert_pw", "")
-        # If UI sent masked bullets, keep previously stored password
-        if raw_pw.startswith("••"):
+        # If UI sent masked bullets or asterisks, keep previously stored password
+        if raw_pw.startswith("••") or raw_pw.startswith("**"):
             prev = load_kiwoom_credentials(mask_passwords=False)
             data_to_save["account_pw"] = _obfuscate(prev.get("account_pw", ""))
         else:
             data_to_save["account_pw"] = _obfuscate(raw_pw)
 
-        if raw_cert.startswith("••"):
+        if raw_cert.startswith("••") or raw_cert.startswith("**"):
             prev = load_kiwoom_credentials(mask_passwords=False)
             data_to_save["cert_pw"] = _obfuscate(prev.get("cert_pw", ""))
         else:
