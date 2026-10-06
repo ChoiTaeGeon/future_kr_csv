@@ -667,6 +667,89 @@
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .toast.show { transform: translateX(0); }
+
+        /* Module Identity Card (Theme, Role, Functionality) */
+        .module-identity-card {
+            margin: 12px 24px 0 24px;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            border-radius: 14px;
+            border: 1px solid rgba(0, 242, 254, 0.25);
+            background: rgba(14, 22, 44, 0.72);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+            transition: all 0.3s ease;
+        }
+        .mod-identity-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex: 1;
+            min-width: 280px;
+        }
+        .mod-icon-box {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.35rem;
+            background: rgba(0, 242, 254, 0.12);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+        .mod-info-content {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .mod-title-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .mod-title {
+            font-size: 0.96rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -0.01em;
+        }
+        .mod-role-text {
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            line-height: 1.35;
+        }
+        .mod-functions-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding-left: 12px;
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .mod-fn-pill {
+            font-size: 0.74rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+        .mod-fn-pill i {
+            font-size: 0.72rem;
+        }
     </style>
 </head>
 <body>
@@ -751,9 +834,29 @@
             <button id="tab-mode-dl" class="btn" onclick="switchMarketMode('DEEP_LEARNING')" style="padding: 8px 18px; font-size: 0.85rem; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; color: var(--text-muted); background: transparent; display: flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-brain" style="color: #a855f7;"></i> 딥러닝 (전이학습/PatchTST)
             </button>
+    </div>
+
+    <!-- Comprehensive Module Identity Dashboard Card (주제, 역할, 기능) -->
+    <div class="module-identity-card" id="module-identity-card">
+        <div class="mod-identity-left">
+            <div class="mod-icon-box" id="mod-identity-icon-box">
+                <i class="fa-solid fa-won-sign" id="mod-identity-icon"></i>
+            </div>
+            <div class="mod-info-content">
+                <div class="mod-title-row">
+                    <span class="mod-title" id="mod-identity-title">국내선물 (KOSPI 200 CSV 퀀트 터미널)</span>
+                    <span class="badge badge-cyan" id="mod-identity-badge">DuckDB 고속 벡터화</span>
+                </div>
+                <div class="mod-role-text" id="mod-identity-role">
+                    역할: 코스피 200 선물 대용량 틱데이터를 DuckDB로 고속 로드하여 N-틱/거래량봉 리샘플링, 30대 퀀트 전략 백테스팅 및 이상치(0틱) 정밀 필터링을 수행합니다.
+                </div>
+            </div>
         </div>
-        <div id="mode-quick-info" style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent-cyan);">
-            <i class="fa-solid fa-bolt"></i> <span id="mode-quick-info-text">DuckDB 고속 벡터 백테스트 & 30개 지표 분석 모드</span>
+        <div class="mod-functions-row" id="mod-identity-functions">
+            <div class="mod-fn-pill"><i class="fa-solid fa-database" style="color: var(--accent-cyan);"></i> <span>CSV 무결성 동기화</span></div>
+            <div class="mod-fn-pill"><i class="fa-solid fa-bolt" style="color: var(--accent-amber);"></i> <span>동적 틱봉 리샘플링</span></div>
+            <div class="mod-fn-pill"><i class="fa-solid fa-chart-line" style="color: var(--accent-emerald);"></i> <span>30개 지표 백테스트</span></div>
+            <div class="mod-fn-pill"><i class="fa-solid fa-file-pdf" style="color: #ec4899;"></i> <span>샤프랭킹 & PDF 리포트</span></div>
         </div>
     </div>
 
@@ -1505,6 +1608,30 @@
                     <span class="metric-title"><i class="fa-solid fa-chart-simple"></i> 활성 캔들 형성 진행률</span>
                     <span class="metric-val" id="mock-metric-forming-pct" style="font-size: 1.55rem; color: #c084fc;">0.0%</span>
                     <span class="metric-sub" id="mock-metric-forming-detail">0 / 60 틱 진행 중</span>
+                </div>
+            </div>
+
+            <!-- Deep Learning & Transfer Learning Metrics Row (DL Tab Only) -->
+            <div class="metrics-grid" id="metrics-grid-dl" style="display: none;">
+                <div class="glass-card metric-card purple">
+                    <span class="metric-title"><i class="fa-solid fa-brain"></i> 최적 모델 / 아키텍처</span>
+                    <span class="metric-val" id="dl-metric-model" style="font-size: 1.4rem; color: #c084fc;">PatchTST (Tick)</span>
+                    <span class="metric-sub" id="dl-metric-arch">시계열 패치 인코더 기반</span>
+                </div>
+                <div class="glass-card metric-card emerald">
+                    <span class="metric-title"><i class="fa-solid fa-trophy"></i> 검증 최고 Sharpe Ratio</span>
+                    <span class="metric-val" id="dl-metric-sharpe" style="font-size: 1.55rem; color: #10b981;">2.78</span>
+                    <span class="metric-sub" id="dl-metric-ret">예상 누적 수익률: +44.6%</span>
+                </div>
+                <div class="glass-card metric-card">
+                    <span class="metric-title"><i class="fa-solid fa-stopwatch"></i> 최적 틱 주기 (Optimal Window)</span>
+                    <span class="metric-val" id="dl-metric-best-tick" style="font-size: 1.55rem; color: var(--accent-cyan);">600 틱</span>
+                    <span class="metric-sub" id="dl-metric-granularity">Coarse-to-Fine 탐색 완료</span>
+                </div>
+                <div class="glass-card metric-card rose">
+                    <span class="metric-title"><i class="fa-solid fa-microchip"></i> 추론 지연 / 수렴 손실</span>
+                    <span class="metric-val" id="dl-metric-latency" style="font-size: 1.55rem; color: #f43f5e;">1.42 ms</span>
+                    <span class="metric-sub" id="dl-metric-loss">Validation Loss: 0.0142</span>
                 </div>
             </div>
 
@@ -3955,14 +4082,12 @@ ${kw.params}
 
             const metricsBacktest = document.getElementById('metrics-grid-backtest');
             const metricsMock = document.getElementById('metrics-grid-mock');
+            const metricsDl = document.getElementById('metrics-grid-dl');
 
             const tableRanking = document.getElementById('table-card-ranking');
             const tableBreakdown = document.getElementById('breakdown-card');
             const tableMock = document.getElementById('mock-trading-card');
             const tableDl = document.getElementById('deep-learning-card');
-
-            const quickInfoText = document.getElementById('mode-quick-info-text');
-            const quickInfo = document.getElementById('mode-quick-info');
 
             const chartTitle = document.getElementById('chart-main-title');
             const chartBadge = document.getElementById('chart-mode-badge');
@@ -3987,6 +4112,9 @@ ${kw.params}
                 }
             }
 
+            // Sync Module Identity Banner (Theme, Role, Functionality)
+            updateModuleIdentityBanner(mode);
+
             if (mode === 'DEEP_LEARNING') {
                 currentChartFeedMode = 'HISTORICAL';
                 if (btnDl) { btnDl.classList.add('active-mode-tab'); btnDl.style.color = '#fff'; btnDl.style.background = ''; }
@@ -3995,16 +4123,14 @@ ${kw.params}
                 if (mockSidebar) mockSidebar.style.display = 'none';
                 if (dlSidebar) dlSidebar.style.display = 'flex';
 
-                if (metricsBacktest) metricsBacktest.style.display = 'grid';
+                if (metricsBacktest) metricsBacktest.style.display = 'none';
                 if (metricsMock) metricsMock.style.display = 'none';
+                if (metricsDl) metricsDl.style.display = 'grid';
 
                 if (tableRanking) tableRanking.style.display = 'none';
                 if (tableBreakdown) tableBreakdown.style.display = 'none';
                 if (tableMock) tableMock.style.display = 'none';
                 if (tableDl) tableDl.style.display = 'block';
-
-                if (quickInfoText) quickInfoText.innerText = '전이학습(Transfer Learning) & PatchTST 틱 주기 최적화 모드';
-                if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = '#c084fc'; }
 
                 if (chartTitle) chartTitle.innerText = '딥러닝 & 전이학습 모델 벤치마크 및 성과 차트';
                 if (chartBadge) { chartBadge.innerText = '딥러닝 분석'; chartBadge.className = 'badge badge-purple'; }
@@ -4027,14 +4153,12 @@ ${kw.params}
 
                 if (metricsBacktest) metricsBacktest.style.display = 'none';
                 if (metricsMock) metricsMock.style.display = 'grid';
+                if (metricsDl) metricsDl.style.display = 'none';
 
                 if (tableRanking) tableRanking.style.display = 'none';
                 if (tableBreakdown) tableBreakdown.style.display = 'none';
                 if (tableMock) tableMock.style.display = 'block';
                 if (tableDl) tableDl.style.display = 'none';
-
-                if (quickInfoText) quickInfoText.innerText = '키움 OpenAPI 실시간 틱 수신 & N-Tick 동적 캔들 스트리밍';
-                if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = '#10b981'; }
 
                 if (chartTitle) chartTitle.innerText = '키움 국내선물 실시간 틱차트 (LIVE)';
                 if (chartBadge) { chartBadge.innerText = '🔴 LIVE 스트리밍'; chartBadge.className = 'badge badge-rose'; }
@@ -4056,14 +4180,12 @@ ${kw.params}
 
                 if (metricsBacktest) metricsBacktest.style.display = 'grid';
                 if (metricsMock) metricsMock.style.display = 'none';
+                if (metricsDl) metricsDl.style.display = 'none';
 
                 if (tableRanking) tableRanking.style.display = 'block';
                 if (tableBreakdown) tableBreakdown.style.display = (breakdownData && breakdownData.length > 0) ? 'block' : 'none';
                 if (tableMock) tableMock.style.display = 'none';
                 if (tableDl) tableDl.style.display = 'none';
-
-                if (quickInfoText) quickInfoText.innerText = 'CDT 캔들 바이너리 고속 파싱 & 중복제거 모드';
-                if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = '#f59e0b'; }
 
                 if (chartTitle) chartTitle.innerText = '키움 영웅문 Global 해외선물 CDT 캔들 차트';
                 if (chartBadge) { chartBadge.innerText = '해외선물 분석'; chartBadge.className = 'badge badge-emerald'; }
@@ -4092,14 +4214,12 @@ ${kw.params}
 
                 if (metricsBacktest) metricsBacktest.style.display = 'grid';
                 if (metricsMock) metricsMock.style.display = 'none';
+                if (metricsDl) metricsDl.style.display = 'none';
 
                 if (tableRanking) tableRanking.style.display = 'block';
                 if (tableBreakdown) tableBreakdown.style.display = (breakdownData && breakdownData.length > 0) ? 'block' : 'none';
                 if (tableMock) tableMock.style.display = 'none';
                 if (tableDl) tableDl.style.display = 'none';
-
-                if (quickInfoText) quickInfoText.innerText = 'DuckDB 고속 벡터 백테스트 & 30개 지표 분석 모드';
-                if (quickInfo) { quickInfo.style.display = 'flex'; quickInfo.style.color = 'var(--accent-cyan)'; }
 
                 if (chartTitle) chartTitle.innerText = '키움 스타일 국내선물 틱봉 차트 (CSV 백테스트)';
                 if (chartBadge) { chartBadge.innerText = 'CSV 백테스트 분석'; chartBadge.className = 'badge badge-emerald'; }
@@ -4111,6 +4231,82 @@ ${kw.params}
                     previewChart();
                 }
                 showToast("국내선물(KOSPI 200 CSV 백테스트) 모드로 전환되었습니다.", "fa-won-sign");
+            }
+
+            // Smooth Plotly Resize across all tab transitions
+            setTimeout(() => {
+                const p = document.getElementById('plotly-chart');
+                if (p && typeof Plotly !== 'undefined' && p.data) {
+                    Plotly.Plots.resize(p);
+                }
+            }, 100);
+        }
+
+        function updateModuleIdentityBanner(mode) {
+            const iconBox = document.getElementById('mod-identity-icon-box');
+            const icon = document.getElementById('mod-identity-icon');
+            const title = document.getElementById('mod-identity-title');
+            const badge = document.getElementById('mod-identity-badge');
+            const role = document.getElementById('mod-identity-role');
+            const fns = document.getElementById('mod-identity-functions');
+            if (!title) return;
+
+            if (mode === 'DEEP_LEARNING') {
+                if (iconBox) { iconBox.style.background = 'rgba(168, 85, 247, 0.15)'; iconBox.style.borderColor = 'rgba(168, 85, 247, 0.4)'; }
+                if (icon) { icon.className = 'fa-solid fa-brain'; icon.style.color = '#c084fc'; }
+                title.innerText = '딥러닝 & 전이학습 (PatchTST / Foundation Model Tick Pipeline)';
+                if (badge) { badge.className = 'badge badge-purple'; badge.innerText = '시계열 파운데이션 모델 최적화'; }
+                if (role) role.innerText = '역할: 선물 미세 구조(Microstructure)를 시계열 패치 단위로 학습하여 최적 틱 주기(Coarse-to-Fine Grid Search)를 자동으로 탐색하고 딥러닝 기반 방향성을 예측합니다.';
+                if (fns) {
+                    fns.innerHTML = `
+                        <div class="mod-fn-pill"><i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i> <span>CSV 무결성 100% 검증</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-brain" style="color: #c084fc;"></i> <span>PatchTST / LSTM / Transfomer</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-magnifying-glass-chart" style="color: var(--accent-cyan);"></i> <span>Coarse-to-Fine 틱 주기 탐색</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-chart-line" style="color: var(--accent-amber);"></i> <span>학습 ETA & 벤치마크</span></div>
+                    `;
+                }
+            } else if (mode === 'MOCK') {
+                if (iconBox) { iconBox.style.background = 'rgba(16, 185, 129, 0.15)'; iconBox.style.borderColor = 'rgba(16, 185, 129, 0.4)'; }
+                if (icon) { icon.className = 'fa-solid fa-tower-broadcast'; icon.style.color = '#10b981'; }
+                title.innerText = '실시간 모의매매 (Kiwoom OpenAPI Live Streaming Terminal)';
+                if (badge) { badge.className = 'badge badge-rose'; badge.innerText = '실시간 틱 스트리밍 & 가상 계좌'; }
+                if (role) role.innerText = '역할: 키움증권 OpenAPI로부터 실시간 체결 틱을 1초 주기로 스트리밍 받아 10T~1000T 동적 틱봉을 즉시 형성하고, 1계약 가상 매수/매도/전량청산 및 평가손익(PnL)을 실시간 시뮬레이션합니다.';
+                if (fns) {
+                    fns.innerHTML = `
+                        <div class="mod-fn-pill"><i class="fa-solid fa-server" style="color: var(--accent-cyan);"></i> <span>키움 실시간 호가/틱 수신</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-stopwatch" style="color: #f43f5e;"></i> <span>10T~1000T 동적 캔들 형성</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-bolt" style="color: var(--accent-emerald);"></i> <span>1클릭 시장가 주문/청산</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-receipt" style="color: var(--accent-amber);"></i> <span>체결로그 & 실시간 PnL</span></div>
+                    `;
+                }
+            } else if (mode === 'OVERSEAS') {
+                if (iconBox) { iconBox.style.background = 'rgba(245, 158, 11, 0.15)'; iconBox.style.borderColor = 'rgba(245, 158, 11, 0.4)'; }
+                if (icon) { icon.className = 'fa-solid fa-globe'; icon.style.color = '#f59e0b'; }
+                title.innerText = '해외선물 (Global Futures CDT 바이너리 & 캔들 분석)';
+                if (badge) { badge.className = 'badge badge-amber'; badge.innerText = '영웅문 Global CDT 디코더'; }
+                if (role) role.innerText = '역할: 나스닥(NQ), 오일(CL), 골드(GC) 등 영웅문 Global의 .cdt 바이너리 파일을 순수 파이썬 바이너리 언팩으로 고속 디코딩하고 중복 틱 필터링 및 글로벌 백테스트를 수행합니다.';
+                if (fns) {
+                    fns.innerHTML = `
+                        <div class="mod-fn-pill"><i class="fa-solid fa-file-binary" style="color: #f59e0b;"></i> <span>CDT/CSV 다중 파싱</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-chart-candlestick" style="color: var(--accent-cyan);"></i> <span>NQ/MNQ/CL/GC 프리셋</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-clock" style="color: #c084fc;"></i> <span>EOD 당일청산 설정</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-dollar-sign" style="color: var(--accent-emerald);"></i> <span>달러($) 환산 백테스트</span></div>
+                    `;
+                }
+            } else {
+                if (iconBox) { iconBox.style.background = 'rgba(0, 242, 254, 0.12)'; iconBox.style.borderColor = 'rgba(0, 242, 254, 0.3)'; }
+                if (icon) { icon.className = 'fa-solid fa-won-sign'; icon.style.color = 'var(--accent-cyan)'; }
+                title.innerText = '국내선물 (KOSPI 200 CSV 퀀트 터미널)';
+                if (badge) { badge.className = 'badge badge-cyan'; badge.innerText = 'DuckDB 고속 벡터화 & 30대 지표'; }
+                if (role) role.innerText = '역할: 코스피 200 선물 대용량 틱데이터를 DuckDB로 고속 로드하여 N-틱/거래량봉 리샘플링, 30대 퀀트 전략 백테스팅 및 이상치(0틱) 정밀 필터링을 수행합니다.';
+                if (fns) {
+                    fns.innerHTML = `
+                        <div class="mod-fn-pill"><i class="fa-solid fa-database" style="color: var(--accent-cyan);"></i> <span>CSV 무결성 동기화</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-bolt" style="color: var(--accent-amber);"></i> <span>동적 틱봉 리샘플링</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-chart-line" style="color: var(--accent-emerald);"></i> <span>30개 지표 백테스트</span></div>
+                        <div class="mod-fn-pill"><i class="fa-solid fa-file-pdf" style="color: #ec4899;"></i> <span>샤프랭킹 & PDF 리포트</span></div>
+                    `;
+                }
             }
         }
 
@@ -7463,6 +7659,32 @@ ${kw.params}
             document.addEventListener('visibilitychange', () => {
                 if (!document.hidden && currentMarketMode === 'MOCK' && !isRealtimePaused) {
                     fetchRealtimeBars(false);
+                }
+            });
+
+            // Global window resize handler for active Plotly charts
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    if (typeof Plotly !== 'undefined') {
+                        ['plotly-chart', 'rt-plotly-chart', 'backtest-chart', 'dl-chart'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el && el.offsetParent !== null) {
+                                try { Plotly.Plots.resize(el); } catch (e) {}
+                            }
+                        });
+                    }
+                }, 200);
+            });
+
+            // Keyboard shortcut: ESC to dismiss folder/file browser modal
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const modal = document.getElementById('fs-modal-overlay');
+                    if (modal && modal.style.display !== 'none') {
+                        closeFsModal();
+                    }
                 }
             });
         });

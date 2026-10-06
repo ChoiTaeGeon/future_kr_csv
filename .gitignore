@@ -16,6 +16,8 @@ output/
 *.duckdb*
 *.wal
 data/cache/
+data/dl_cache/
+logs/
 data/market_data.duckdb*
 data/kiwoom_credentials.json
 
