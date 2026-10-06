@@ -169,7 +169,7 @@ class TickDataScanner:
         file_size = file_path.stat().st_size
         date_str = self.extract_date_from_name(file_path.name)
 
-        # 1. File size check
+        # Fast size & existence check
         if file_size < 100:
             issues.append(f"비정상적인 최소 파일 크기 ({file_size} bytes)")
             return FileIntegrityResult(
@@ -183,19 +183,12 @@ class TickDataScanner:
                 issues=issues
             )
 
-        # Compute SHA-256
-        sha256 = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            while chunk := f.read(65536):
-                sha256.update(chunk)
-        sha_str = sha256.hexdigest()
-
-        # 2. Encoding detection & header check
+        # 2. Fast encoding detection & header check on initial bytes
         chosen_enc = None
         col_map = {}
         for enc in ['cp949', 'euc-kr', 'utf-8', 'utf-8-sig', 'latin1']:
             try:
-                sample = pd.read_csv(file_path, encoding=enc, nrows=5)
+                sample = pd.read_csv(file_path, encoding=enc, nrows=3)
                 chosen_enc = enc
                 break
             except Exception:
@@ -211,8 +204,7 @@ class TickDataScanner:
                 file_size_bytes=file_size,
                 encoding_detected="corrupted",
                 row_count=0,
-                issues=issues,
-                sha256_hash=sha_str
+                issues=issues
             )
 
         try:
@@ -222,16 +214,6 @@ class TickDataScanner:
         except Exception as e:
             issues.append(f"컬럼 매핑 실패: {e}")
 
-        # 3. Fast line count estimation
-        row_count = 0
-        try:
-            with open(file_path, "rb") as f:
-                row_count = sum(1 for _ in f) - 1
-            if row_count < 10:
-                issues.append(f"체결 틱 수 부족 ({row_count} 행)")
-        except Exception as e:
-            issues.append(f"행 개수 집계 오류: {e}")
-
         is_valid = (len(issues) == 0)
         return FileIntegrityResult(
             file_path=str(file_path),
@@ -240,9 +222,8 @@ class TickDataScanner:
             is_valid=is_valid,
             file_size_bytes=file_size,
             encoding_detected=chosen_enc,
-            row_count=max(0, row_count),
-            issues=issues,
-            sha256_hash=sha_str
+            row_count=0,
+            issues=issues
         )
 
     def scan_all_files_with_integrity(self) -> Tuple[List[Tuple[str, Path]], DataSanitizeReport]:

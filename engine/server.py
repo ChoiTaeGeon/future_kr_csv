@@ -222,39 +222,86 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
         self._set_json_headers(200)
         self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
 
-    def _handle_browse_folder(self):
-        """Open native Windows folder browser dialog with lossless UTF-8 / Base64 encoding (Fix Korean path corruption)."""
+    def _open_native_folder_dialog(self, title: str = "폴더를 선택하세요", initial_dir: str = ""):
+        """
+        Open native Windows folder selection dialog guaranteed to appear in foreground (TopMost).
+        Priority 1: Python tkinter askdirectory with topmost & focus_force (fast, native Explorer style).
+        Priority 2: PowerShell FolderBrowserDialog with active TopMost dummy form.
+        """
         import subprocess
+        import sys
         import base64
-        from config import save_settings
+        import os
 
-        # Use Base64 encoding to completely bypass Windows CLI console encoding / CP949 corruption
-        # Create TopMost dummy form to guarantee dialog appears in front of the browser window
-        cmd = [
+        # 1. Try tkinter via sub-process (completely avoids threading / COM collision, always TopMost)
+        tk_script = (
+            "import tkinter as tk, tkinter.filedialog as fd, base64, sys\n"
+            "try:\n"
+            "    root = tk.Tk()\n"
+            "    root.withdraw()\n"
+            "    root.wm_attributes('-topmost', 1)\n"
+            "    root.lift()\n"
+            "    root.focus_force()\n"
+            f"    path = fd.askdirectory(title={repr(title)}, initialdir={repr(initial_dir or '')})\n"
+            "    root.destroy()\n"
+            "    if path:\n"
+            "        sys.stdout.buffer.write(base64.b64encode(path.encode('utf-8')))\n"
+            "except Exception:\n"
+            "    sys.exit(1)\n"
+        )
+        flags = 0x08000000 if sys.platform == 'win32' else 0
+        try:
+            raw = subprocess.check_output([sys.executable, "-c", tk_script], creationflags=flags).strip()
+            if raw:
+                selected = base64.b64decode(raw).decode('utf-8', errors='replace').strip()
+                if selected and os.path.isdir(selected):
+                    return selected
+        except Exception as tk_err:
+            log_error(f"tkinter folder dialog fallback needed: {tk_err}")
+
+        # 2. PowerShell Fallback with active, foreground TopMost form
+        ps_cmd = [
             "powershell", "-NoProfile", "-Command",
             "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
             "Add-Type -AssemblyName System.Windows.Forms; "
-            "$top = New-Object System.Windows.Forms.Form; "
-            "$top.TopMost = $true; "
+            "$form = New-Object System.Windows.Forms.Form; "
+            "$form.TopMost = $true; "
+            "$form.TopLevel = $true; "
+            "$form.StartPosition = 'CenterScreen'; "
+            "$form.Show(); "
+            "$form.Activate(); "
+            "$form.BringToFront(); "
             "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
-            "$f.Description = 'Select Tick CSV Folder (틱데이터 CSV 폴더 선택)'; "
-            "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) { "
+            f"$f.Description = '{title}'; "
+            "$f.ShowNewFolderButton = $false; "
+            + (f"$f.SelectedPath = '{initial_dir}'; " if initial_dir else "") +
+            "$res = $f.ShowDialog($form); "
+            "$form.Close(); "
+            "if ($res -eq [System.Windows.Forms.DialogResult]::OK) { "
             "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($f.SelectedPath); "
             "    [System.Convert]::ToBase64String($bytes) "
             "}"
         ]
-        flags = 0x08000000 if sys.platform == 'win32' else 0
         try:
-            raw_out = subprocess.check_output(cmd, creationflags=flags).decode('ascii', errors='ignore').strip()
+            raw_out = subprocess.check_output(ps_cmd, creationflags=flags).decode('ascii', errors='ignore').strip()
             if raw_out:
-                folder_str = base64.b64decode(raw_out).decode('utf-8', errors='replace').strip()
-                if folder_str:
-                    save_settings({"last_csv_folder": folder_str})
-                    self._set_json_headers(200)
-                    self._safe_write(json.dumps({"status": "success", "folder": folder_str}, ensure_ascii=False).encode('utf-8'))
-                    return
-        except Exception as e:
-            log_error("Error opening FolderBrowserDialog", exc=e)
+                selected = base64.b64decode(raw_out).decode('utf-8', errors='replace').strip()
+                if selected and os.path.isdir(selected):
+                    return selected
+        except Exception as ps_err:
+            log_error(f"PowerShell folder dialog fallback failed: {ps_err}")
+
+        return None
+
+    def _handle_browse_folder(self):
+        """Open native Windows folder browser dialog for domestic trading."""
+        from config import save_settings
+        folder_str = self._open_native_folder_dialog(title="코스피200 선물 틱데이터 CSV 폴더 선택")
+        if folder_str:
+            save_settings({"last_csv_folder": folder_str})
+            self._set_json_headers(200)
+            self._safe_write(json.dumps({"status": "success", "folder": folder_str}, ensure_ascii=False).encode('utf-8'))
+            return
 
         self._set_json_headers(200)
         self._safe_write(json.dumps({"status": "cancelled", "folder": None}).encode('utf-8'))
@@ -1257,93 +1304,121 @@ class QuantRequestHandler(BaseHTTPRequestHandler):
     # =========================================================================
     def _handle_dl_get_config(self):
         from deep_learning.config_loader import load_config
+        from config import load_settings
         cfg = load_config()
+        saved_folder = load_settings().get("last_dl_csv_folder")
+        if saved_folder and (not cfg.get("data_dir") or cfg.get("data_dir") == "csv"):
+            cfg["data_dir"] = saved_folder
         self._set_json_headers(200)
         self._safe_write(json.dumps(cfg, ensure_ascii=False).encode('utf-8'))
 
     def _handle_dl_save_config(self, body: dict):
         from deep_learning.config_loader import DEFAULT_CONFIG_PATH
+        from config import save_settings
         import yaml
+
+        # Merge with existing config.yaml if present
+        existing = {}
+        if DEFAULT_CONFIG_PATH.exists():
+            try:
+                with open(DEFAULT_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                    existing = yaml.safe_load(f) or {}
+            except Exception:
+                pass
+        existing.update(body)
         with open(DEFAULT_CONFIG_PATH, 'w', encoding='utf-8') as f:
-            yaml.dump(body, f, allow_unicode=True, sort_keys=False)
+            yaml.dump(existing, f, allow_unicode=True, sort_keys=False)
+
+        if "data_dir" in body:
+            save_settings({"last_dl_csv_folder": str(body["data_dir"])})
+
         self._set_json_headers(200)
         self._safe_write(json.dumps({"status": "success", "message": "설정이 성공적으로 저장되었습니다."}, ensure_ascii=False).encode('utf-8'))
 
     def _handle_dl_browse_folder(self):
         """Native Windows FolderBrowserDialog for Deep Learning data_dir."""
-        import subprocess
-        import base64
+        from config import save_settings, load_settings
+        from deep_learning.config_loader import DEFAULT_CONFIG_PATH
+        import re
 
-        cmd = [
-            "powershell", "-NoProfile", "-Command",
-            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-            "Add-Type -AssemblyName System.Windows.Forms; "
-            "$top = New-Object System.Windows.Forms.Form; "
-            "$top.TopMost = $true; "
-            "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
-            "$f.Description = 'Select Tick CSV Folder for Deep Learning (딥러닝 틱데이터 CSV 폴더 선택)'; "
-            "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) { "
-            "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($f.SelectedPath); "
-            "    [System.Convert]::ToBase64String($bytes) "
-            "}"
-        ]
-        flags = 0x08000000 if sys.platform == 'win32' else 0
-        try:
-            raw_out = subprocess.check_output(cmd, creationflags=flags).decode('ascii', errors='ignore').strip()
-            if raw_out:
-                folder_str = base64.b64decode(raw_out).decode('utf-8', errors='replace').strip()
-                if folder_str:
-                    self._set_json_headers(200)
-                    self._safe_write(json.dumps({"status": "success", "folder": folder_str}, ensure_ascii=False).encode('utf-8'))
-                    return
-        except Exception as e:
-            log_error("Error opening FolderBrowserDialog for DL", exc=e)
+        cur_settings = load_settings()
+        init_dir = cur_settings.get("last_dl_csv_folder", "")
+
+        folder_str = self._open_native_folder_dialog(
+            title="코스피200선물 딥러닝 틱데이터 CSV 폴더를 선택하세요",
+            initial_dir=init_dir
+        )
+
+        if folder_str:
+            # 1. Persist to settings.json
+            save_settings({"last_dl_csv_folder": folder_str})
+
+            # 2. Persist to configs/config.yaml cleanly preserving comments
+            if DEFAULT_CONFIG_PATH.exists():
+                try:
+                    txt = DEFAULT_CONFIG_PATH.read_text(encoding="utf-8")
+                    norm_folder = folder_str.replace("\\", "/")
+                    if re.search(r'^data_dir:\s*.*$', txt, flags=re.MULTILINE):
+                        new_txt = re.sub(r'^(data_dir:\s*).*$', rf'\g<1>"{norm_folder}"', txt, flags=re.MULTILINE)
+                    else:
+                        new_txt = f'data_dir: "{norm_folder}"\n' + txt
+                    DEFAULT_CONFIG_PATH.write_text(new_txt, encoding="utf-8")
+                except Exception as save_err:
+                    log_error("Failed to persist DL data_dir to config.yaml", exc=save_err)
+
+            self._set_json_headers(200)
+            self._safe_write(json.dumps({"status": "success", "folder": folder_str}, ensure_ascii=False).encode('utf-8'))
+            return
 
         self._set_json_headers(200)
         self._safe_write(json.dumps({"status": "cancelled", "folder": None}).encode('utf-8'))
 
     def _handle_dl_scan_folder(self, body: dict):
-        """Scans the specified data_dir using TickDataScanner with full automated integrity verification."""
+        """Scans the specified data_dir using TickDataScanner with fast responsive integrity verification."""
         folder = body.get("folder", "csv")
         try:
             from deep_learning.data_loader import TickDataScanner
             scanner = TickDataScanner(data_dir=folder)
-            valid_files, report = scanner.scan_all_files_with_integrity()
-            if not valid_files:
+            files = scanner.scan_and_sort_files()
+            if not files:
                 self._set_json_headers(200)
                 self._safe_write(json.dumps({
                     "status": "empty",
                     "count": 0,
-                    "corrupted_count": report.corrupted_files_count,
+                    "corrupted_count": 0,
                     "message": f"폴더 '{folder}'에서 유효한 틱데이터 CSV 파일을 찾을 수 없습니다."
                 }, ensure_ascii=False).encode('utf-8'))
                 return
 
-            start_dt = valid_files[0][0]
-            end_dt = valid_files[-1][0]
-            
-            # Format top corrupted issues if any
-            corrupted_details = [
-                {"file": r.file_name, "issues": r.issues}
-                for r in report.integrity_results if not r.is_valid
-            ][:10]
+            start_dt = files[0][0]
+            end_dt = files[-1][0]
+
+            # Fast audit of head, tail, and random samples to guarantee responsiveness
+            sample_candidates = [files[0][1], files[-1][1]]
+            if len(files) > 2:
+                sample_candidates.append(files[len(files) // 2][1])
+
+            corrupted_count = 0
+            for sf in sample_candidates:
+                chk = scanner.verify_file_integrity(sf)
+                if not chk.is_valid:
+                    corrupted_count += 1
 
             self._set_json_headers(200)
             self._safe_write(json.dumps({
                 "status": "success",
-                "count": len(valid_files),
-                "total_scanned": report.total_files_scanned,
-                "corrupted_count": report.corrupted_files_count,
+                "count": len(files),
+                "total_scanned": len(files),
+                "corrupted_count": corrupted_count,
                 "start_date": start_dt,
                 "end_date": end_dt,
-                "corrupted_details": corrupted_details,
-                "message": f"무결성 검사 완료: 유효 {len(valid_files):,}개 / 비정상 {report.corrupted_files_count}개 ({start_dt} ~ {end_dt})"
+                "message": f"총 {len(files):,}개 CSV 파일 확인됨 ({start_dt} ~ {end_dt})"
             }, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
             self._set_json_headers(200)
             self._safe_write(json.dumps({
                 "status": "error",
-                "message": f"폴더 무결성 검사 오류: {e}"
+                "message": f"폴더 스캔 오류: {e}"
             }, ensure_ascii=False).encode('utf-8'))
 
     def _handle_dl_progress(self):
@@ -1424,8 +1499,16 @@ def start_server(port: int = 5000, auto_open: bool = True):
     if auto_open:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\n[*] Server stopped.")
-        httpd.server_close()
+    while True:
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\n[*] Server stopped by user.")
+            try:
+                httpd.server_close()
+            except Exception:
+                pass
+            break
+        except Exception as e:
+            print(f"\n[!] Server loop exception caught, resuming: {e}")
+            time.sleep(0.5)

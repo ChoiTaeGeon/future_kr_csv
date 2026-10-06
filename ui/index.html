@@ -1377,7 +1377,7 @@
                             <input type="text" id="dl-csv-folder" class="input-field" value="csv" placeholder="폴더 경로 (예: csv, D:/ticks)" onchange="saveDlFolderLocally(this.value)">
                         </div>
                         <div style="display: flex; gap: 6px;">
-                            <button type="button" class="btn btn-secondary" onclick="browseDlFolder()" style="flex: 1; padding: 6px; font-size: 0.76rem; justify-content: center;" title="윈도우 탐색기로 CSV 폴더 선택">
+                            <button type="button" id="dl-btn-browse-folder" class="btn btn-secondary" onclick="browseDlFolder()" style="flex: 1; padding: 6px; font-size: 0.76rem; justify-content: center;" title="윈도우 탐색기로 CSV 폴더 선택">
                                 <i class="fa-solid fa-folder-open" style="color: var(--accent-cyan);"></i> 폴더 선택
                             </button>
                             <button type="button" class="btn btn-secondary" onclick="scanDlDataFolder()" style="flex: 1; padding: 6px; font-size: 0.76rem; justify-content: center;" title="폴더 내 CSV 유효성 스캔">
@@ -6604,12 +6604,23 @@ ${kw.params}
 
         async function loadDlConfig() {
             try {
+                // 1. Check localStorage first
+                const savedLocalFolder = localStorage.getItem('dl_csv_folder');
+                if (savedLocalFolder) {
+                    const folderInput = document.getElementById('dl-csv-folder');
+                    if (folderInput) folderInput.value = savedLocalFolder;
+                }
+
+                // 2. Fetch server config.yaml & settings
                 const res = await fetch('/api/dl/config');
                 const cfg = await res.json();
                 if (cfg) {
-                    if (cfg.data_dir) {
+                    if (cfg.data_dir && !savedLocalFolder) {
                         const folderInput = document.getElementById('dl-csv-folder');
-                        if (folderInput) folderInput.value = cfg.data_dir;
+                        if (folderInput) {
+                            folderInput.value = cfg.data_dir;
+                            localStorage.setItem('dl_csv_folder', cfg.data_dir);
+                        }
                     }
                     if (cfg.tick_window) {
                         document.getElementById('dl-tick-start').value = cfg.tick_window.start || 100;
@@ -6620,27 +6631,53 @@ ${kw.params}
                         document.getElementById('dl-coarse-to-fine').checked = !!cfg.coarse_to_fine.enabled;
                     }
                 }
+
+                // Auto-scan on initial load if folder is present
+                const curFolder = document.getElementById('dl-csv-folder')?.value.trim();
+                if (curFolder) {
+                    setTimeout(() => scanDlDataFolder(), 300);
+                }
             } catch (e) {
                 console.error("loadDlConfig error:", e);
             }
         }
 
-        function saveDlFolderLocally(folder) {
-            saveDlConfig();
+        async function saveDlFolderLocally(folder) {
+            if (folder) {
+                localStorage.setItem('dl_csv_folder', folder);
+            }
+            await saveDlConfig();
+            await scanDlDataFolder();
         }
 
         async function browseDlFolder() {
+            const btn = document.getElementById('dl-btn-browse-folder');
+            const origHtml = btn ? btn.innerHTML : '';
             try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 탐색기 열림...';
+                }
+                showToast("윈도우 폴더 탐색기 창이 열렸습니다. 폴더를 선택하세요.", "fa-folder-open");
                 const res = await fetch('/api/dl/browse-folder', { method: 'POST' });
                 const data = await res.json();
                 if (data.status === 'success' && data.folder) {
-                    document.getElementById('dl-csv-folder').value = data.folder;
-                    showToast(`폴더 선택 완료: ${data.folder}`, "fa-folder-open");
+                    const folderInput = document.getElementById('dl-csv-folder');
+                    if (folderInput) folderInput.value = data.folder;
+                    localStorage.setItem('dl_csv_folder', data.folder);
+                    showToast(`폴더 영구 저장 완료: ${data.folder}`, "fa-circle-check");
                     await scanDlDataFolder();
                     await saveDlConfig();
+                } else if (data.status === 'cancelled') {
+                    showToast("폴더 선택이 취소되었습니다.", "fa-xmark");
                 }
             } catch (e) {
                 showToast("폴더 탐색 오류: " + e, "fa-triangle-exclamation");
+            } finally {
+                if (btn && origHtml) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                }
             }
         }
 
